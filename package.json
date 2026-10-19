@@ -1,0 +1,24 @@
+{
+	"name": "twitch-village",
+	"version": "0.1.0",
+	"description": "",
+	"main": "index.js",
+	"scripts": {
+		"format": "prettier --write . --log-level=warn"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "MIT",
+	"devEngines": {
+		"packageManager": {
+			"name": "pnpm",
+			"version": "12.14.0",
+			"onFail": "download"
+		}
+	},
+	"packageManager": "pnpm@12.14.0",
+	"type": "module",
+	"dependencies": {
+		"prettier": "^3.9.10"
+	}
+}
