@@ -9,6 +9,7 @@
 		"dev": "turbo dev",
 		"typecheck": "turbo typecheck",
 		"test": "turbo test",
+		"test:watch": "turbo test:watch",
 		"lint": "turbo lint",
 		"assets": "turbo assets",
 		"format": "prettier --write . --log-level=warn"

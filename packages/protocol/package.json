@@ -11,6 +11,7 @@
 	"scripts": {
 		"typecheck": "tsc --noEmit -p tsconfig.json",
 		"test": "vitest run --passWithNoTests",
+		"test:watch": "vitest watch --passWithNoTests",
 		"lint": "eslint src"
 	},
 	"dependencies": {
