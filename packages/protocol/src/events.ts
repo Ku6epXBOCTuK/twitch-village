@@ -32,7 +32,6 @@ export const ViewerEventSchema = Schema.Union([
 	ViewerGift,
 	ViewerLeft,
 ]);
-export type ViewerEvent = Schema.Schema.Type<typeof ViewerEventSchema>;
 
 export const WidgetInit = Schema.TaggedStruct("Init", {
 	widgetId: WidgetId,
@@ -74,3 +73,8 @@ export const WidgetToCoreSchema = Schema.Struct({
 	protocolVersion: Schema.Int,
 	message: RenderCommandSchema,
 });
+
+export type ViewerEvent = Schema.Schema.Type<typeof ViewerEventSchema>;
+export type WidgetEvent = Schema.Schema.Type<typeof WidgetEventSchema>;
+export type CoreToWidget = Schema.Schema.Type<typeof CoreToWidgetSchema>;
+export type WidgetToCore = Schema.Schema.Type<typeof WidgetToCoreSchema>;
