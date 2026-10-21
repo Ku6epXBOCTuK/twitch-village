@@ -281,18 +281,18 @@ export const isCompatible = (remote: number): boolean =>
 
 Файл: `packages/protocol/src/commands.ts`.
 
-`Data.TaggedEnum` для всех вариантов из раздела 4.2 архитектуры + `Schema` для
-каждого варианта и объединённая `RenderCommandSchema`.
+`Schema.TaggedStruct` для всех вариантов из раздела 4.2 архитектуры,
+объединённая `RenderCommandSchema` и выведенный из неё `RenderCommand`.
 
 Требования:
 
 - только plain-поля (числа, строки, булевы, массивы);
 - `SetTransform` — все поля опциональные, кроме `nodeId`;
-- `Batch.commands` — массив `RenderCommand`, максимальная глубина вложенности 1;
+- `Batch.commands` — массив команд без `Batch`, максимальная глубина вложенности
+  1;
 - лимиты: `nodeId` ≤ 128 символов, `commands` ≤ 2048, `fps` 1..60, `alpha` 0..1.
 
-Готово: `RenderCommand.match` покрывает все варианты (проверяется типом на шаге
-16).
+Готово: `Match.valueTags` покрывает все варианты (проверяется типом на шаге 16).
 
 ### Шаг 12. События
 
