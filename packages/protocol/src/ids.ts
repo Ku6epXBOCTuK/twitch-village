@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 
-export const identifier = Schema.String.check(
+const identifier = Schema.String.check(
 	Schema.isPattern(/^[A-Za-z0-9:_-]+$/),
 	Schema.isMaxLength(128),
 );
