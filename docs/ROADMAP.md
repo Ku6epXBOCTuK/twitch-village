@@ -301,8 +301,8 @@ export const isCompatible = (remote: number): boolean =>
 - `WidgetEvent`: `Init`, `ViewerEvent`, `Viewport`, `Pause`, `Resume`,
   `Dispose`.
 - `ViewerEvent`: `ViewerJoined`, `ViewerMessage`, `ViewerGift`, `ViewerLeft`.
-- `CoreToWidget` / `WidgetToCore` — объединения сообщений с полем
-  `protocolVersion`.
+- `CoreToWidget` / `WidgetToCore` — конверты `{ protocolVersion, message }`, где
+  `message` — `WidgetEvent` или `RenderCommand` соответственно.
 
 Готово: схемы валидируют примеры из архитектуры, лишние поля отбрасываются
 (`onExcessProperty: "error"`).
