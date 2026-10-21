@@ -2,8 +2,15 @@
 	"name": "twitch-village",
 	"version": "0.1.0",
 	"description": "",
-	"main": "index.js",
+	"private": true,
+	"type": "module",
 	"scripts": {
+		"build": "turbo build",
+		"dev": "turbo dev",
+		"typecheck": "turbo typecheck",
+		"test": "turbo test",
+		"lint": "turbo lint",
+		"assets": "turbo assets",
 		"format": "prettier --write . --log-level=warn"
 	},
 	"keywords": [],
@@ -17,8 +24,13 @@
 		}
 	},
 	"packageManager": "pnpm@12.14.0",
-	"type": "module",
-	"dependencies": {
-		"prettier": "^3.9.10"
+	"devDependencies": {
+		"@tv/config": "workspace:*",
+		"eslint": "^10.13.0",
+		"prettier": "^3.9.10",
+		"turbo": "^2.11.9",
+		"typescript": "^5.9.3",
+		"typescript-eslint": "^8.71.2",
+		"vitest": "^5.0.5"
 	}
 }

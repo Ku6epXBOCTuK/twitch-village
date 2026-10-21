@@ -1,0 +1,26 @@
+{
+	"name": "@tv/widget-village",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"main": "./src/index.ts",
+	"types": "./src/index.ts",
+	"exports": {
+		".": "./src/index.ts",
+		"./worker": "./src/worker.ts"
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit -p tsconfig.json",
+		"test": "vitest run --passWithNoTests",
+		"lint": "eslint src",
+		"assets": "assetpack"
+	},
+	"dependencies": {
+		"@tv/protocol": "workspace:*",
+		"effect": "^4.0.5"
+	},
+	"devDependencies": {
+		"@assetpack/core": "^1.7.0",
+		"sharp": "^0.35.5"
+	}
+}

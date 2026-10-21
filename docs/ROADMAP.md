@@ -11,14 +11,16 @@
 
 - Пакеты: `@tv/protocol`, `@tv/core`, `@tv/widget-village`, `@tv/event-mock`,
   `@tv/config`, приложение `@tv/overlay`.
-- Версии фиксируются на шаге 8; примерные мейджоры: `pixi.js@8`, `effect@3`,
-  `@assetpack/core@1`, `turbo@2`, `vite@7`, `vitest@3`, `typescript@5`.
+- Версии фиксируются на шаге 8; примерные мейджоры: `pixi.js@8`, `effect@4`,
+  `@assetpack/core@1`, `turbo@2`, `vite@8`, `vitest@5`, `typescript@5.9`.
 - `pnpm` — единственный пакетный менеджер, `pnpm -F <pkg> <cmd>` для адресных
   команд.
 
 ---
 
 ## Фаза 0. Каркас монорепо
+
+**Статус: выполнено.** Итоговые версии и отличия от плана см. в конце фазы.
 
 ### Шаг 1. Workspace
 
@@ -218,6 +220,34 @@ pnpm -F @tv/widget-village add -D @assetpack/core sharp
 
 **Чекпоинт фазы 0:** `pnpm install && pnpm typecheck && pnpm lint` — зелёные,
 `pnpm turbo run --dry` показывает 5 пакетов.
+
+### Что фактически сделано (отличия от плана)
+
+- Версии: `pixi.js` 8.22, `effect` 4.0, `vite` 8.3, `typescript` 5.9, `vitest`
+  5.0, `eslint` 10.13, `turbo` 2.11, `@assetpack/core` 1.7.
+- **TypeScript 5.9, а не 7.x**: `typescript-eslint` 8.x падает на TS 7.0
+  (`typescript-eslint does not support TS 7.0`). Вернуться к TS 7, когда
+  появится поддержка.
+- **Effect 4, а не 3**: v4 — актуальный релиз, `Schema` доступна из `effect`. В
+  фазе 1 использовать `Data` и `Schema` из `effect`, а не из старых подпутей v3.
+- **Project references не используются**: `noEmit` несовместим с `composite`.
+  Вместо `tsc -b` каждый пакет делает `tsc --noEmit -p tsconfig.json`; типы
+  между пакетами разрешаются через `package.json` (`"types": "./src/index.ts"`)
+  и symlink pnpm. `turbo typecheck` запускает их параллельно.
+- **`@tv/config` без собственных скриптов** — только `tsconfig.base.json` и
+  `eslint.base.js`.
+- **Настройки pnpm живут в `pnpm-workspace.yaml`**, а не в `package.json`: поле
+  `pnpm` в `package.json` pnpm 12 игнорирует. Там же
+  `allowBuilds: { sharp: true, cpu-features: false }` — `cpu-features` не
+  собирается на Windows + Python 3 и не нужен.
+- `eslint.config.js` — flat config с `typescript-eslint`; запреты на импорты и
+  глобалы по пакетам (проверено: импорт `pixi.js` и обращение к `window` в
+  `widget-village` дают ошибки линтера).
+- Скрипт `assets` в `widget-village` уже есть (`assetpack`), но конфиг
+  `.assetpack.js` создаётся в фазе 4 — до этого `pnpm assets` падает, это
+  ожидаемо.
+- `test` использует `vitest run --passWithNoTests`, чтобы пустые пакеты не
+  валили `pnpm test` до появления тестов.
 
 ---
 
@@ -500,7 +530,7 @@ interface WidgetStatus {
 
 Собирает всё вместе:
 
-```
+```js
 createWidgetHost(descriptor, deps) → {
   start(): Effect<void, WidgetError>;
   stop(): Effect<void, never>;
