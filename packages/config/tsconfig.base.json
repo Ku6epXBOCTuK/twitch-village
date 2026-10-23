@@ -13,5 +13,7 @@
 		"skipLibCheck": true,
 		"noEmit": true,
 		"sourceMap": true
-	}
+	},
+	"include": [],
+	"files": []
 }
