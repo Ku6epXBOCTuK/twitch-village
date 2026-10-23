@@ -5,6 +5,7 @@ export interface RenderHandle {
 	readonly nodeId: NodeId;
 	readonly kind: string;
 }
+
 export interface NodeTransform {
 	readonly x?: number;
 	readonly y?: number;
