@@ -26,11 +26,12 @@
 - pnpm-workspace (`apps/*`, `packages/*`), Turborepo 2.11, корневые скрипты
   `build`, `dev`, `typecheck`, `test`, `test:watch`, `lint`, `assets`, `format`.
 - Пакеты созданы, `main`/`types` указывают на `src/index.ts`; `@tv/config` — это
-  только `tsconfig.base.json` и `eslint.base.js`.
+  только `tsconfig.base.json`, который наследуют все пакеты.
 - Зафиксированы версии: pixi.js 8.22, effect 4.0, vite 8.3, typescript 5.9,
   vitest 5.0, eslint 10.13, turbo 2.11, @assetpack/core 1.7.
 - Линт границ настроен flat-конфигом: запреты на `pixi.js` и `@tv/core` в
-  виджете, на глобалы `window`/`document` в воркере, на `@tv/widget-*` в Core.
+  виджете, на глобалы `window`/`document` в воркере, на `@tv/widget-*` в Core
+  (позже дополнено зонами Effect, см. ниже).
 
 Отклонения от первоначального плана, которые нужно помнить:
 
