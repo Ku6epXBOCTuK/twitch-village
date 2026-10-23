@@ -1,418 +1,89 @@
 # Roadmap: twitch-village
 
-**Статус:** Draft **Дата:** 2026-10-21 **Связанный документ:**
-`docs/ARCHITECTURE.md`
+**Статус:** в работе (фазы 0-1 закрыты, фаза 2 частично) **Дата:** 2026-10-21
+**Обновлено:** 2026-10-23 **Связанный документ:** `docs/ARCHITECTURE.md`
 
 Пошаговый план реализации v1 «деревня зрителей». Каждый шаг — самостоятельная
 единица работы: файлы, команды, критерий готовности. Шаги выполняются строго по
-порядку внутри фазы; фазы заканчиваются чекпоинтом.
+порядку внутри фазы; фазы заканчиваются чекпоинтом. Номера шагов сохраняются: на
+них ссылаются архитектура и история задач.
 
 Соглашения:
 
 - Пакеты: `@tv/protocol`, `@tv/core`, `@tv/widget-village`, `@tv/event-mock`,
   `@tv/config`, приложение `@tv/overlay`.
-- Версии фиксируются на шаге 8; примерные мейджоры: `pixi.js@8`, `effect@4`,
-  `@assetpack/core@1`, `turbo@2`, `vite@8`, `vitest@5`, `typescript@5.9`.
 - `pnpm` — единственный пакетный менеджер, `pnpm -F <pkg> <cmd>` для адресных
   команд.
+- Выполненные шаги описаны итогом, а не инструкцией: инструкция больше не нужна,
+  код — источник правды.
 
 ---
 
 ## Фаза 0. Каркас монорепо
 
-**Статус: выполнено.** Итоговые версии и отличия от плана см. в конце фазы.
+**Статус: выполнено (шаги 1-8).** Что получилось:
 
-### Шаг 1. Workspace
+- pnpm-workspace (`apps/*`, `packages/*`), Turborepo 2.11, корневые скрипты
+  `build`, `dev`, `typecheck`, `test`, `test:watch`, `lint`, `assets`, `format`.
+- Пакеты созданы, `main`/`types` указывают на `src/index.ts`; `@tv/config` — это
+  только `tsconfig.base.json` и `eslint.base.js`.
+- Зафиксированы версии: pixi.js 8.22, effect 4.0, vite 8.3, typescript 5.9,
+  vitest 5.0, eslint 10.13, turbo 2.11, @assetpack/core 1.7.
+- Линт границ настроен flat-конфигом: запреты на `pixi.js` и `@tv/core` в
+  виджете, на глобалы `window`/`document` в воркере, на `@tv/widget-*` в Core.
 
-Файлы: `pnpm-workspace.yaml`, `package.json` (правка), `.npmrc`, `.gitignore`.
+Отклонения от первоначального плана, которые нужно помнить:
 
-```yaml
-# pnpm-workspace.yaml
-packages:
-  - "apps/*"
-  - "packages/*"
-```
-
-```ini
-# .npmrc
-auto-install-peers=true
-strict-peer-dependencies=false
-```
-
-`.gitignore`: `node_modules`, `dist`, `dist-assets`, `.turbo`, `*.log`,
-`.DS_Store`.
-
-Готово: `pnpm -v` отвечает, `pnpm install` проходит без ошибок.
-
-### Шаг 2. Корневой package.json
-
-Файл: `package.json`.
-
-- `"private": true`, `"type": "module"`.
-- `packageManager` оставить как есть (`pnpm@12.14.0`), `devEngines` сохранить.
-- Скрипты (все через turbo):
-
-```json
-{
-  "scripts": {
-    "build": "turbo build",
-    "dev": "turbo dev",
-    "typecheck": "turbo typecheck",
-    "test": "turbo test",
-    "lint": "turbo lint",
-    "assets": "turbo assets",
-    "format": "prettier --write . --log-level=warn"
-  }
-}
-```
-
-Готово: `pnpm typecheck` падает только из-за отсутствия пакетов (ожидаемо, шаг
-3+).
-
-### Шаг 3. Турбо
-
-Файлы: `turbo.json`, `.turbo/.gitkeep` (не нужен, создастся сам).
-
-```json
-{
-  "$schema": "https://turbo.build/schema.json",
-  "tasks": {
-    "build": { "dependsOn": ["^build"], "outputs": ["dist/**"] },
-    "typecheck": { "dependsOn": ["^build"] },
-    "test": { "dependsOn": ["^build"] },
-    "lint": {},
-    "dev": { "cache": false, "persistent": true },
-    "assets": { "outputs": ["dist-assets/**"] }
-  }
-}
-```
-
-Готово: `pnpm turbo --version` и `pnpm turbo run --dry` работают.
-
-### Шаг 4. Общий конфиг TS
-
-Пакет `packages/config`.
-
-Файлы:
-
-- `packages/config/package.json` — `"@tv/config"`, `"private": true`,
-  `"exports": { "./tsconfig.base.json": "./tsconfig.base.json" }`.
-- `packages/config/tsconfig.base.json`:
-
-```json
-{
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
-    "verbatimModuleSyntax": true,
-    "skipLibCheck": true,
-    "isolatedModules": true,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
-    "composite": true,
-    "noEmit": false
-  }
-}
-```
-
-Готово: файл на месте, `packages/config/tsconfig.json` extends базовый с
-`"files": []`.
-
-### Шаг 5. Скелет пакетов
-
-Создать папки и `package.json` (одинаковая форма, различия — в `name` и
-`dependencies`):
-
-- `packages/protocol`
-- `packages/core`
-- `packages/widget-village`
-- `packages/event-mock`
-- `apps/overlay`
-
-Шаблон:
-
-```json
-{
-  "name": "@tv/protocol",
-  "version": "0.0.0",
-  "private": true,
-  "type": "module",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
-  "exports": { ".": "./src/index.ts" },
-  "scripts": {
-    "build": "tsc -b",
-    "typecheck": "tsc -b --noEmit false",
-    "test": "vitest run",
-    "lint": "eslint src"
-  }
-}
-```
-
-На v1 пакеты используют `src/index.ts` как `main` (без отдельной сборки) — Vite
-транспилирует TS напрямую. Шаг «настоящий build» добавим, только если
-понадобится публикация.
-
-Готово: `pnpm install` связывает workspace-пакеты, `node -e` видит их в
-`node_modules/@tv`.
-
-### Шаг 6. TS-проекты и ссылки
-
-Для каждого пакета — `tsconfig.json`:
-
-```json
-{
-  "extends": "@tv/config/tsconfig.base.json",
-  "compilerOptions": { "rootDir": "src", "outDir": "dist", "lib": ["ES2022"] },
-  "include": ["src"]
-}
-```
-
-Особые случаи:
-
-- `packages/core` — `lib: ["ES2022", "DOM"]`.
-- `packages/widget-village` — `lib: ["ES2022", "WebWorker"]`, без `DOM`.
-- `apps/overlay` — `lib: ["ES2022", "DOM", "DOM.Iterable", "WebWorker"]`.
-- Корневой `tsconfig.json` — `"references"` на все пакеты, `"files": []`.
-
-Готово: `pnpm typecheck` проходит на пустых `src/index.ts`.
-
-### Шаг 7. Линт, boundaries, prettier
-
-Файлы: `eslint.config.js` (flat config в корне),
-`packages/config/eslint.base.js`.
-
-Запреты (правилами `no-restricted-imports` достаточно для v1):
-
-- `packages/protocol` → `pixi.js`.
-- `packages/widget-village` → `pixi.js`, `@tv/core`.
-- `packages/core` → `@tv/widget-*`.
-- `packages/event-mock` → `@tv/core`, `pixi.js`.
-- В `widget-village` запрет глобалов `document`, `window` (правило
-  `no-restricted-globals`).
-
-Готово: `pnpm lint` зелёный; проверочный фейковый импорт `pixi.js` в
-`widget-village` даёт ошибку линтера.
-
-### Шаг 8. Установка зависимостей и фиксация версий
-
-Команды:
-
-```bash
-pnpm -F @tv/protocol add effect
-pnpm -F @tv/core add pixi.js effect
-pnpm -F @tv/widget-village add effect
-pnpm -F @tv/event-mock add effect
-pnpm add -Dw turbo typescript vitest eslint @typescript-eslint/parser \
-  @typescript-eslint/eslint-plugin @tv/config
-pnpm -F @tv/widget-village add -D @assetpack/core sharp
-```
-
-После установки — зафиксировать точные версии (`pnpm-lock.yaml` коммитится).
-Записать фактические версии PixiJS/Effect в `ARCHITECTURE.md`, раздел 12.
-
-Готово: все пакеты ставятся, `pnpm install --frozen-lockfile` проходит.
-
-**Чекпоинт фазы 0:** `pnpm install && pnpm typecheck && pnpm lint` — зелёные,
-`pnpm turbo run --dry` показывает 5 пакетов.
-
-### Что фактически сделано (отличия от плана)
-
-- Версии: `pixi.js` 8.22, `effect` 4.0, `vite` 8.3, `typescript` 5.9, `vitest`
-  5.0, `eslint` 10.13, `turbo` 2.11, `@assetpack/core` 1.7.
-- **TypeScript 5.9, а не 7.x**: `typescript-eslint` 8.x падает на TS 7.0
-  (`typescript-eslint does not support TS 7.0`). Вернуться к TS 7, когда
-  появится поддержка.
-- **Effect 4, а не 3**: v4 — актуальный релиз, `Schema` доступна из `effect`. В
-  фазе 1 использовать `Data` и `Schema` из `effect`, а не из старых подпутей v3.
+- **TypeScript 5.9, не 7.x**: `typescript-eslint` 8.x не поддерживает TS 7.
 - **Project references не используются**: `noEmit` несовместим с `composite`.
-  Вместо `tsc -b` каждый пакет делает `tsc --noEmit -p tsconfig.json`; типы
-  между пакетами разрешаются через `package.json` (`"types": "./src/index.ts"`)
-  и symlink pnpm. `turbo typecheck` запускает их параллельно.
-- **`@tv/config` без собственных скриптов** — только `tsconfig.base.json` и
-  `eslint.base.js`.
-- **Настройки pnpm живут в `pnpm-workspace.yaml`**, а не в `package.json`: поле
-  `pnpm` в `package.json` pnpm 12 игнорирует. Там же
-  `allowBuilds: { sharp: true, cpu-features: false }` — `cpu-features` не
-  собирается на Windows + Python 3 и не нужен.
-- `eslint.config.js` — flat config с `typescript-eslint`; запреты на импорты и
-  глобалы по пакетам (проверено: импорт `pixi.js` и обращение к `window` в
-  `widget-village` дают ошибки линтера).
-- Скрипт `assets` в `widget-village` уже есть (`assetpack`), но конфиг
-  `.assetpack.js` создаётся в фазе 4 — до этого `pnpm assets` падает, это
-  ожидаемо.
-- `test` использует `vitest run --passWithNoTests`, чтобы пустые пакеты не
-  валили `pnpm test` до появления тестов.
+  Каждый пакет проверяется через `tsc --noEmit -p tsconfig.json`, типы между
+  пакетами идут через `package.json` и symlink pnpm.
+- **Настройки pnpm живут в `pnpm-workspace.yaml`**: поле `pnpm` в `package.json`
+  pnpm 12 игнорирует. Там же `allowBuilds: { sharp: true, cpu-features: false }`
+  (`cpu-features` не собирается на Windows + Python 3).
+- `test` запускается с `--passWithNoTests`, чтобы пустые пакеты не валили
+  корневой прогон.
+- `pnpm assets` падает до появления `.assetpack.js` в фазе 4 — это ожидаемо.
 
 ---
 
 ## Фаза 1. Протокол
 
-### Шаг 9. Версия протокола
+**Статус: выполнено (шаги 9-16).** `@tv/protocol` содержит:
 
-Файл: `packages/protocol/src/version.ts`.
+- `version.ts` — `PROTOCOL_VERSION`, `isCompatible` по мажорной версии;
+- `ids.ts` — брендированные `NodeId`, `AssetId`, `EffectId`, `ViewerId`,
+  `WidgetId` (до 128 символов, `[A-Za-z0-9:_-]`);
+- `commands.ts` — все `RenderCommand`, листовой `Batch` (≤ 2048), лимиты в
+  схемах (`alpha` 0..1, `fps` 1..60);
+- `events.ts` — `WidgetEvent`, `ViewerEvent` и конверты `CoreToWidget` /
+  `WidgetToCore` с `protocolVersion`;
+- `errors.ts` — 11 `Data.TaggedError` из раздела 6 архитектуры;
+- `transport.ts` — `Transport<Outgoing, Incoming>`, `createDirectTransportPair`
+  для тестов.
 
-```ts
-export const PROTOCOL_VERSION = 1;
-export const PROTOCOL_MAJOR = 1;
-export const isCompatible = (remote: number): boolean =>
-  remote === PROTOCOL_MAJOR;
-```
-
-Готово: экспорт доступен из `@tv/protocol`.
-
-### Шаг 10. Идентификаторы
-
-Файл: `packages/protocol/src/ids.ts`.
-
-- Брендированные типы через `Schema`: `WidgetId`, `NodeId`, `AssetId`,
-  `EffectId`, `ViewerId`.
-- `nodeId` — строка до 128 символов, `[a-zA-Z0-9:_-]`.
-
-Готово: `Schema.decodeUnknownSync(NodeId)` отбрасывает мусор, тест на это — в
-шаге 16.
-
-### Шаг 11. Команды рендера
-
-Файл: `packages/protocol/src/commands.ts`.
-
-`Schema.TaggedStruct` для всех вариантов из раздела 4.2 архитектуры,
-объединённая `RenderCommandSchema` и выведенный из неё `RenderCommand`.
-
-Требования:
-
-- только plain-поля (числа, строки, булевы, массивы);
-- `SetTransform` — все поля опциональные, кроме `nodeId`;
-- `Batch.commands` — массив команд без `Batch`, максимальная глубина вложенности
-  1;
-- лимиты: `nodeId` ≤ 128 символов, `commands` ≤ 2048, `fps` 1..60, `alpha` 0..1.
-
-Готово: `Match.valueTags` покрывает все варианты (проверяется типом на шаге 16).
-
-### Шаг 12. События
-
-Файл: `packages/protocol/src/events.ts`.
-
-- `WidgetEvent`: `Init`, `ViewerEvent`, `Viewport`, `Pause`, `Resume`,
-  `Dispose`.
-- `ViewerEvent`: `ViewerJoined`, `ViewerMessage`, `ViewerGift`, `ViewerLeft`.
-- `CoreToWidget` / `WidgetToCore` — конверты `{ protocolVersion, message }`, где
-  `message` — `WidgetEvent` или `RenderCommand` соответственно.
-
-Готово: схемы валидируют примеры из архитектуры, лишние поля отбрасываются
-(`onExcessProperty: "error"`).
-
-### Шаг 13. Ошибки
-
-Файл: `packages/protocol/src/errors.ts`.
-
-`Data.TaggedError` для всех записей из раздела 6 архитектуры +
-`ProtocolMismatch`. Каждая ошибка несёт `widgetId`, человекочитаемое `message` и
-поле-контекст (`nodeId`, `assetId`, `effectId`, `param` — что применимо).
-
-Готово: `Effect.catchTag` компилируется на каждую ошибку, тесты — шаг 16.
-
-### Шаг 14. Транспорт
-
-Файлы: `packages/protocol/src/transport.ts`,
-`packages/protocol/src/transport-direct.ts`.
-
-- `interface Transport { send, subscribe, dispose }` (см. раздел 4.5).
-- `createDirectTransportPair(): [coreSide, widgetSide]` — синхронная реализация
-  для тестов, с возможностью включить асинхронную доставку через
-  `queueMicrotask`.
-
-Готово: пара транспортов передаёт сообщение в обе стороны, `dispose` отписывает
-обработчики.
-
-### Шаг 15. Публичный API пакета
-
-Файл: `packages/protocol/src/index.ts`.
-
-Экспорты: `PROTOCOL_VERSION`, типы и схемы, `Transport`,
-`createDirectTransportPair`.
-
-Готово: `import { ... } from "@tv/protocol"` работает в `core` и
-`widget-village`.
-
-### Шаг 16. Тесты протокола
-
-Файлы: `packages/protocol/src/__tests__/commands.test.ts`, `events.test.ts`,
-`errors.test.ts`, `transport.test.ts`, `compile-exhaustive.test.ts`.
-
-Что проверяется:
-
-1. Round-trip через `structuredClone` для каждого варианта команд и событий.
-2. Валидные/невалидные примеры по таблице (неизвестный тег, `alpha: 2`,
-   `fps: 0`, `nodeId: ""`, лишнее поле).
-3. Вложенный `Batch` глубже одного уровня — отклоняется.
-4. `DirectTransport` доставляет в обе стороны, после `dispose` — нет.
-5. Exhaustive: функция-заглушка `match` без `default`, компилируется.
-6. `PROTOCOL_VERSION` совпадает с мажором в `isCompatible`.
-
-Готово: `pnpm -F @tv/protocol test` — зелёный, покрытие `commands.ts` ≥ 90%.
-
-**Чекпоинт фазы 1:** контракт стабилен, `pnpm typecheck` и `pnpm test` зелёные;
-ничего из `pixi.js` в графе зависимостей `protocol` нет
-(`pnpm why pixi.js -F @tv/protocol` — пусто).
+Тесты покрывают round-trip через `structuredClone`, невалидные примеры (лишние
+поля, границы, неизвестный тег), доставку через транспорт, `dispose` и
+исчерпывающий `Match`.
 
 ---
 
 ## Фаза 2. Render Core
 
-### Шаг 17. Бутстрап Pixi
+**Статус: в работе.**
 
-Файлы: `packages/core/src/pixi/create-app.ts`,
-`packages/core/src/pixi/types.ts`.
+### Шаги 17-18 (выполнено)
 
-- `createCoreApp({ width, height, backgroundAlpha })` → `PIXI.Application` с
-  `resizeTo: window` (в браузере) и `resolution: window.devicePixelRatio`.
-- В тестах — фабрика подменяется на фейк, поэтому создание приложения
-  инжектируется, а не импортируется внутри модулей.
+- `createCoreApp(options, deps)` — бутстрап `PIXI.Application` с `resizeTo` и
+  `devicePixelRatio`; фабрика приложения инжектируется через `CoreAppDeps`.
+- `RenderTarget` — интерфейс, за которым скрыт Pixi; `RenderState` хранит снимок
+  дерева и общий для обеих реализаций.
+- `createPixiRenderTarget` и `createFakeRenderTarget` проходят общий
+  `render-target.contract.ts` (дерево, трансформации, спрайты, анимации, текст,
+  фильтры, удаление с детьми, неизвестный узел) без GPU.
 
-Готово: модуль компилируется; в `overlay` вызывается вручную (шаг 43), пока не
-проверяем визуально.
-
-### Шаг 18. Абстракция рендер-цели
-
-Файл: `packages/core/src/nodes/render-target.ts`.
-
-Интерфейс, за которым скрыт Pixi (нужен для тестов без GPU):
-
-```ts
-interface RenderTarget {
-  createContainer(): RenderHandle;
-  createSprite(assetId: AssetId): RenderHandle;
-  createText(text: string, style: TextStyle): RenderHandle;
-  setTransform(handle: RenderHandle, t: TransformPatch): void;
-  setSpriteAsset(handle: RenderHandle, assetId: AssetId): void;
-  setAnimation(
-    handle: RenderHandle,
-    frames: Texture[],
-    fps: number,
-    loop: boolean,
-  ): void;
-  addFilter(handle: RenderHandle, filter: Filter): void;
-  removeFilter(handle: RenderHandle, effectId: EffectId): void;
-  remove(handle: RenderHandle): void;
-  attach(
-    parent: RenderHandle | null,
-    handle: RenderHandle,
-    order: number,
-  ): void;
-}
-```
-
-`packages/core/src/nodes/pixi-render-target.ts` — реализация поверх Pixi;
-`packages/core/src/nodes/fake-render-target.ts` — реализация для тестов
-(записывает вызовы в массив).
-
-Готово: обе реализации проходят общий contract-тест (шаг 30).
+Следствие для DI: фабрики и параметры вместо контейнера, подробнее —
+`docs/ARCHITECTURE.md` §11.1.
 
 ### Шаг 19. NodeRegistry
 
@@ -539,6 +210,9 @@ createWidgetHost(descriptor, deps) → {
 }
 ```
 
+`createWidgetHost` — обычная фабрика с явными `deps`; `Effect` живёт только
+внутри `start`/`stop` (Scope, таймаут `Ready`), см. `ARCHITECTURE.md` §11.1.
+
 - `start`: загрузка бандла → регистрация эффектов → создание воркера → ожидание
   `Ready` с таймаутом 5 с → `active`.
 - `stop`: `Dispose` → `terminate()` → `unloadBundle` → удаление всех узлов.
@@ -569,12 +243,20 @@ createWidgetHost(descriptor, deps) → {
 - Публичный API Core — `packages/core/src/index.ts`:
 
 ```ts
-createRenderCore({ app, width, height }) → {
+createRenderCore(deps: {
+  app: Application;
+  createRenderTarget(widgetId: WidgetId): RenderTarget;
+  now?: () => number;
+}) → {
   scene: SceneManager;
   status: StatusStore;
   dispose(): Promise<void>;
 }
 ```
+
+Зависимости — plain-объект, без `Layer`/`Context`: `createRenderTarget` даёт
+фейк в тестах и Pixi в браузере. Внутри `activate` — `Effect` со `Scope` и
+таймаутом, наружу — `Promise` (`ARCHITECTURE.md` §11.1).
 
 Готово: тест «активировать два виджета → два контейнера, деактивировать один →
 один контейнер, бандл выгружен».
@@ -951,9 +633,8 @@ pnpm build
 
 1. Реальный Twitch: EventSub-клиент (сервер) или IRC в браузере.
 2. Отдельная страница-пульт + транспорт до OBS-источника (WebSocket).
-3. `Scope`/`acquireRelease` из Effect на ресурсы, `@effect/rpc` при росте
-   протокола.
+3. `@effect/rpc` при росте протокола.
 4. Второй виджет (например, алерты) — проверка, что Core действительно
-   виджет-агностичен.
+   виджет-агностичен; заодно повод пересмотреть DI (`ARCHITECTURE.md` §11.1).
 5. WASM-виджет на том же протоколе.
 6. Персистентность деревни между перезапусками.
