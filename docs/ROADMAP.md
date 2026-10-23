@@ -44,6 +44,12 @@
 - `test` запускается с `--passWithNoTests`, чтобы пустые пакеты не валили
   корневой прогон.
 - `pnpm assets` падает до появления `.assetpack.js` в фазе 4 — это ожидаемо.
+- **Зоны Effect в линтере (дополнено 2026-10-23).** Корневой `eslint.config.js`
+  использует `@typescript-eslint/no-restricted-imports` и держит зоны из
+  `ARCHITECTURE.md` §11.1: `Layer`/`ManagedRuntime` — только в
+  `core/src/live.ts`, `runSync` — только в `core/src/effect-adapter.ts`,
+  Pixi-слой и пакеты `protocol`/`widget-village`/`event-mock` не видят рантайм
+  Effect.
 
 ---
 
@@ -74,15 +80,21 @@
 
 ### Шаги 17-18 (выполнено)
 
-- `createCoreApp(options, deps)` — бутстрап `PIXI.Application` с `resizeTo` и
-  `devicePixelRatio`; фабрика приложения инжектируется через `CoreAppDeps`.
+- `createPixiApp(options)` и `buildPixiOptions(options)` — plain-фабрика
+  `PIXI.Application` с `resizeTo` и `devicePixelRatio`; настроек `deps` больше
+  нет, инъекция переехала в граф.
+- `live.ts` — композиционный корень: сервисы `CoreApp`, `Clock`,
+  `RenderTargets`, слои `coreAppLayer`/`clockLayer`/`renderTargetsLayer`,
+  `coreLive(options)` и `createCoreRuntime(options)` на `ManagedRuntime`.
 - `RenderTarget` — интерфейс, за которым скрыт Pixi; `RenderState` хранит снимок
   дерева и общий для обеих реализаций.
 - `createPixiRenderTarget` и `createFakeRenderTarget` проходят общий
   `render-target.contract.ts` (дерево, трансформации, спрайты, анимации, текст,
   фильтры, удаление с детьми, неизвестный узел) без GPU.
+- Тесты `live.test.ts` собирают граф с `Layer.succeed(CoreApp, fake)` вместо
+  ручного `deps`-объекта.
 
-Следствие для DI: фабрики и параметры вместо контейнера, подробнее —
+Следствие для DI: `Layer` как композиционный корень, зоны проверяются линтером —
 `docs/ARCHITECTURE.md` §11.1.
 
 ### Шаг 19. NodeRegistry
@@ -202,16 +214,18 @@ interface WidgetStatus {
 Собирает всё вместе:
 
 ```js
-createWidgetHost(descriptor, deps) → {
+createWidgetHost(descriptor) → Effect<{
   start(): Effect<void, WidgetError>;
   stop(): Effect<void, never>;
   onCoreEvent(event: WidgetEvent): void;
   status(): WidgetStatus;
-}
+}, never, CoreServices>
 ```
 
-`createWidgetHost` — обычная фабрика с явными `deps`; `Effect` живёт только
-внутри `start`/`stop` (Scope, таймаут `Ready`), см. `ARCHITECTURE.md` §11.1.
+Зависимости (`RenderTargets`, `Clock`, позже `Assets`) хост берёт из `Context`,
+а не из `deps`-объекта: сборка идёт в `Effect.gen`, поэтому незакрытая
+зависимость — ошибка типов. `start`/`stop` остаются `Effect` со `Scope` и
+таймаутом (см. `ARCHITECTURE.md` §11.1).
 
 - `start`: загрузка бандла → регистрация эффектов → создание воркера → ожидание
   `Ready` с таймаутом 5 с → `active`.
@@ -254,21 +268,28 @@ createRenderCore(deps: {
 }
 ```
 
-Зависимости — plain-объект, без `Layer`/`Context`: `createRenderTarget` даёт
-фейк в тестах и Pixi в браузере. Внутри `activate` — `Effect` со `Scope` и
-таймаутом, наружу — `Promise` (`ARCHITECTURE.md` §11.1).
+Зависимости приходят из графа `live.ts` (`CoreApp`, `Clock`, `RenderTargets`),
+`createRenderCore` их только принимает и остаётся plain-объектом. Сам
+`SceneManager` живёт в `Effect`: `activate`/`deactivate` возвращают
+`Effect<void, WidgetError>`, приложение выполняет их через `ManagedRuntime`
+(`ARCHITECTURE.md` §11.1).
 
 Готово: тест «активировать два виджета → два контейнера, деактивировать один →
 один контейнер, бандл выгружен».
 
 ### Шаг 29. Дренаж в тикере
 
-Файл: `packages/core/src/loop/ticker.ts`.
+Файл: `packages/core/src/loop/ticker.ts`, мост —
+`packages/core/src/effect-adapter.ts`.
 
-- `app.ticker.add(() => { for each widget: bus.drain(); apply; watchdog.check() })`.
+- `app.ticker.add(() => adapter.frame())`, где `adapter` — единственное место с
+  `runSync`: собирает `bus.drain()` по виджетам, применение команд и
+  `watchdog.check()` в одну Effect-программу на кадр.
 - Всё в `try/catch`: исключение → `RenderFailed` в статус, кадр продолжается.
 - Пустой кадр не должен создавать мусор (никаких аллокаций массивов при пустых
   очередях).
+- Линт запрещает `runSync` вне `effect-adapter.ts`, поэтому второй мост не
+  появится молча.
 
 Готово: тест «исключение в applyCommand не ломает обработку следующего виджета».
 
@@ -634,7 +655,8 @@ pnpm build
 1. Реальный Twitch: EventSub-клиент (сервер) или IRC в браузере.
 2. Отдельная страница-пульт + транспорт до OBS-источника (WebSocket).
 3. `@effect/rpc` при росте протокола.
-4. Второй виджет (например, алерты) — проверка, что Core действительно
-   виджет-агностичен; заодно повод пересмотреть DI (`ARCHITECTURE.md` §11.1).
+4. Второй виджет (например, алерты). Вместе с ним появляются per-widget слои
+   (`Layer.fresh` + `Effect.provide` на активацию) и widget-scoped
+   `NodeRegistry`/`CommandBus`/`WidgetHost` (`ARCHITECTURE.md` §11.1).
 5. WASM-виджет на том же протоколе.
 6. Персистентность деревни между перезапусками.

@@ -1,11 +1,8 @@
-import type { Application } from "pixi.js";
-import type { CoreAppDeps, CoreAppOptions, CorePixiOptions } from "./types";
+import { Application } from "pixi.js";
+import type { CoreAppOptions, CorePixiOptions } from "./types";
 
-export async function createCoreApp(
-	options: CoreAppOptions,
-	deps: CoreAppDeps,
-): Promise<Application> {
-	const pixiOptions: CorePixiOptions = {
+export function buildPixiOptions(options: CoreAppOptions): CorePixiOptions {
+	return {
 		width: options.width,
 		height: options.height,
 		background: 0x000000,
@@ -16,7 +13,12 @@ export async function createCoreApp(
 			? { resizeTo: window, resolution: window.devicePixelRatio ?? 1 }
 			: { resolution: 1 }),
 	};
+}
 
-	const app = await deps.createApplication(pixiOptions);
+export async function createPixiApp(
+	options: CoreAppOptions,
+): Promise<Application> {
+	const app = new Application();
+	await app.init(buildPixiOptions(options));
 	return app;
 }
