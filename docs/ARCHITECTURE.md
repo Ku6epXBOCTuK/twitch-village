@@ -60,7 +60,7 @@ Stream Avatars для Twitch)
 
 ### 2.1. Компоненты
 
-**Render Core** (`packages/core`, главный поток)
+#### **Render Core** (`packages/core`, главный поток)
 
 - Единственный владелец `PIXI.Application`, `app.stage`, `PIXI.Assets`.
 - Не знает, что именно рисует виджет. Исполняет примитивы: создать узел,
@@ -71,7 +71,7 @@ Stream Avatars для Twitch)
   виджет, происходит внутри него.
 - Владеет реестрами ассетов и эффектов; виджет оперирует только ID.
 
-**Widget Worker** (`packages/widget-village`, по одному экземпляру на виджет)
+#### **Widget Worker** (`packages/widget-village`, по одному экземпляру на виджет)
 
 - Логика (мир, состояния, таймеры, реакция на события) на JS (позже — WASM).
 - Нет доступа к PixiJS, DOM, GPU, сети, `PIXI.Assets`.
@@ -80,7 +80,7 @@ Stream Avatars для Twitch)
   помечает виджет сломанным, скрывает его контейнер; остальные виджеты и рендер
   не затронуты.
 
-**Asset Pipeline**
+#### **Asset Pipeline**
 
 - Ассеты каждого виджета собираются `@assetpack/core` (pipes `pixiPipes`) в
   атласы и `manifest.json` в формате PixiJS v8.
@@ -88,7 +88,7 @@ Stream Avatars для Twitch)
   деактивации.
 - Манифест ассетов — контракт: виджет знает только строковые `assetId`.
 
-**Effect Registry**
+#### **Effect Registry**
 
 - Шейдеры и фильтры — ресурсы Core. Виджет не передаёт GLSL-код, только
   `effectId` и значения uniform'ов.
@@ -98,7 +98,7 @@ Stream Avatars для Twitch)
 - Валидация параметров по схеме до применения; невалидное значение — команда
   отбрасывается.
 
-**Scene Manager** (часть Core)
+#### **Scene Manager** (часть Core)
 
 - Горячее переключение: активация/деактивация виджета = загрузка/выгрузка бандла
   - спавн/терминирование Worker'а + показ/скрытие корневого контейнера.
@@ -106,7 +106,7 @@ Stream Avatars для Twitch)
 
 ### 2.2. Поток данных
 
-```
+```txt
 event-mock  ──►  Core (EventBus)
                    │  postMessage(WidgetEvent)
                    ▼
@@ -145,7 +145,7 @@ pnpm workspaces + Turborepo. Сборка приложений — Vite, тип�
 каждом пакете (project references не используются: `noEmit` несовместим с
 `composite`), тесты — Vitest.
 
-```
+```sh
 twitch-village/
 ├─ apps/
 │  └─ overlay/                 OBS browser source: страница, bootstrap Core, debug-панель
@@ -255,7 +255,7 @@ interface Transport {
 `PIXI.Container`, `NodeRegistry` (локальные ID → Pixi-объекты), очередь команд,
 watchdog, состояние:
 
-```
+```txt
 loading → active → (paused) → active
                 ↘ degraded (ошибки валидации / флуд)
                 ↘ crashed  (ошибка воркера / таймаут heartbeat)
