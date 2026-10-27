@@ -60,7 +60,8 @@
 
 - `version.ts` — `PROTOCOL_VERSION`, `isCompatible` по мажорной версии;
 - `ids.ts` — брендированные `NodeId`, `AssetId`, `EffectId`, `ViewerId`,
-  `WidgetId` (до 128 символов, `[A-Za-z0-9:_-]`);
+  `WidgetId` (до 128 символов, `[A-Za-z0-9:_-]`); исключение — `AssetId`: это
+  путь внутри бандла (`avatar/cat/0`), поэтому ему разрешён `/`;
 - `commands.ts` — все `RenderCommand`, листовой `Batch` (≤ 2048), лимиты в
   схемах (`alpha` 0..1, `fps` 1..60);
 - `events.ts` — `WidgetEvent`, `ViewerEvent` и конверты `CoreToWidget` /
@@ -154,13 +155,29 @@ createCommandBus(config: {
 
 Файлы: `packages/core/src/assets/asset-registry.ts`, `manifest.ts`.
 
-- `init(globalManifest)` → `Assets.init`.
-- `loadBundle(bundleId)`, `unloadBundle(bundleId)`, `isLoaded(bundleId)`.
-- `getTexture(assetId)`: не загружен → `AssetNotFound`.
-- `assetId` = путь внутри бандла, как в манифесте PixiJS v8.
+- `init(globalManifest)` → разбор манифеста схемой и `Assets.init`; из манифеста
+  строится карта `assetId → bundleId`, потому что `getTexture` обязан знать,
+  загружен ли бандл этого ассета.
+- `loadBundle(bundleId)`, `unloadBundle(bundleId)`, `isLoaded(bundleId)`;
+  загруженные бандлы — множество id, текстуры реестр не держит.
+- `getTexture(assetId)`: нет в манифесте, бандл не загружен или бэкенд не отдал
+  текстуру → `AssetNotFound`.
+- `assetId` = путь внутри бандла, как в манифесте PixiJS v8. Алиасы считаются
+  уникальными между бандлами: пространство алиасов в Pixi глобальное, поэтому
+  дубликат — ошибка автора манифеста, а не повод для логики в реестре (побеждает
+  последний). Строгая проверка на дубликаты — отдельный шаг.
+- Признак «манифест уже инициализирован» — флаг самого реестра, выставляемый до
+  `await` (иначе два параллельных `init` вызовут `Assets.init` дважды), а не
+  запрос к `Assets`.
+- Pixi инжектируется портом `AssetBackend` (как `TextureSource` в
+  `apply-command.ts`), поэтому реестр тестируется без GPU; сам реестр —
+  plain-объект с `Promise` и броском `Data.TaggedError`, как `NodeRegistry`.
+  Отказ загрузки пробрасывается исходной ошибкой: подходящего типа в каталоге §6
+  архитектуры нет, решение — на шаге 26.
 
-Готово: тесты на двойную загрузку (идемпотентна), выгрузку, промах по ID (с
-моком `Assets`).
+Готово: тесты на двойную загрузку (идемпотентна), отказ загрузки (бандл остаётся
+снятым, повтор проходит), выгрузку незагруженного бандла (no-op), промах по ID
+на каждом из трёх условий (с фейковым бэкендом).
 
 ### Шаг 23. EffectRegistry
 
