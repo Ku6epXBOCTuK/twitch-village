@@ -8,13 +8,14 @@ import {
 	UnknownNode,
 	type AssetId,
 	type EffectId,
+	type LeafCommand,
 	type RenderCommand,
 	type WidgetId,
 } from "@tv/protocol";
 import { Effect, Match } from "effect";
 import type { Filter, Texture } from "pixi.js";
 import type { NodeRegistry } from "./node-registry";
-import type { NodeTransform, RenderTarget } from "./render-target";
+import type { RenderTarget } from "./render-target";
 
 export type RenderError =
 	| AssetNotFound
@@ -24,6 +25,41 @@ export type RenderError =
 	| InvalidEffectParam
 	| RenderFailed
 	| UnknownNode;
+
+type RenderErrorTags = RenderError["_tag"];
+
+const RENDER_ERROR_TAGS: Record<RenderErrorTags, true> = {
+	AssetNotFound: true,
+	EffectCompileFailed: true,
+	EffectNotFound: true,
+	InvalidCommand: true,
+	InvalidEffectParam: true,
+	RenderFailed: true,
+	UnknownNode: true,
+};
+
+export const isRenderError = (error: unknown): error is RenderError => {
+	return (
+		error !== null &&
+		typeof error === "object" &&
+		"_tag" in error &&
+		Object.hasOwn(RENDER_ERROR_TAGS, (error as { _tag: RenderErrorTags })._tag)
+	);
+};
+
+function toRenderError(
+	ctx: ApplyCommandContext,
+	command: RenderCommand,
+	error: unknown,
+) {
+	return isRenderError(error)
+		? error
+		: new RenderFailed({
+				widgetId: ctx.widgetId,
+				message: `Unexpected render error: widgetId ${ctx.widgetId}, command ${command._tag}, err ${error}`,
+				...("nodeId" in command ? { nodeId: command.nodeId } : {}),
+			});
+}
 
 export interface TextureSource {
 	getTexture(assetId: AssetId): Texture;
@@ -41,113 +77,108 @@ export interface ApplyCommandContext {
 	readonly effects: FilterSource;
 }
 
-export function applyCommand(
+const applyLeaf = Effect.fnUntraced(function* (
+	ctx: ApplyCommandContext,
+	command: LeafCommand,
+): Effect.fn.Return<void, RenderError> {
+	function attempt<A>(run: () => A) {
+		return Effect.try({
+			try: run,
+			catch: (error) => toRenderError(ctx, command, error),
+		});
+	}
+
+	if (command._tag !== "CreateNode") {
+		if (!ctx.registry.has(command.nodeId)) {
+			return yield* Effect.fail(
+				new UnknownNode({
+					widgetId: ctx.widgetId,
+					message: `Unknown node ${command.nodeId}`,
+					nodeId: command.nodeId,
+				}),
+			);
+		}
+	}
+
+	if (
+		command._tag === "SetParent" &&
+		command.parentId !== null &&
+		!ctx.registry.has(command.parentId)
+	) {
+		return yield* Effect.fail(
+			new UnknownNode({
+				widgetId: ctx.widgetId,
+				message: `Unknown parent node ${command.parentId}`,
+				nodeId: command.parentId,
+			}),
+		);
+	}
+
+	yield* Match.valueTags(command, {
+		CreateNode: ({ nodeId, kind }) =>
+			attempt(() => ctx.registry.create(nodeId, kind)),
+		RemoveNode: ({ nodeId }) => attempt(() => ctx.registry.remove(nodeId)),
+		SetParent: ({ nodeId, parentId, order }) =>
+			attempt(() => ctx.target.setParent(nodeId, parentId, order)),
+		SetTransform: ({ nodeId, _tag, ...rest }) =>
+			attempt(() => ctx.target.setTransform(nodeId, rest)),
+		SetSprite: ({ nodeId, assetId }) =>
+			attempt(() =>
+				ctx.target.setSprite(nodeId, ctx.textures.getTexture(assetId)),
+			),
+		SetAnimation: ({ nodeId, assetIds, fps, loop }) =>
+			attempt(() =>
+				ctx.target.setAnimation(
+					nodeId,
+					assetIds.map((assetId) => ctx.textures.getTexture(assetId)),
+					fps,
+					loop,
+				),
+			),
+		SetText: ({ nodeId, text, style }) =>
+			attempt(() => ctx.target.setText(nodeId, text, style)),
+		AddFilter: ({ nodeId, effectId }) =>
+			attempt(() =>
+				ctx.target.addFilter(
+					nodeId,
+					effectId,
+					ctx.effects.get(effectId, nodeId),
+				),
+			),
+		RemoveFilter: ({ nodeId, effectId }) =>
+			attempt(() => ctx.target.removeFilter(nodeId, effectId)),
+		SetFilterParam: ({ nodeId, effectId, param, value }) =>
+			attempt(() => ctx.target.setFilterParam(nodeId, effectId, param, value)),
+	});
+});
+
+export const applyCommand = Effect.fnUntraced(function* (
 	ctx: ApplyCommandContext,
 	command: RenderCommand,
-): Effect.Effect<void, RenderError> {
-	return Effect.gen(function* () {
-		const needsNodeCheck = Match.value(command).pipe(
-			Match.tag("CreateNode", () => false),
-			Match.orElse((cmd) => "nodeId" in cmd),
-		);
-
-		if (needsNodeCheck && "nodeId" in command) {
-			if (!ctx.registry.has(command.nodeId)) {
-				yield* Effect.fail(
-					new UnknownNode({
-						widgetId: ctx.widgetId,
-						message: `Unknown node ${command.nodeId}`,
-						nodeId: command.nodeId,
-					}),
-				);
-			}
-		}
-
-		yield* Match.value(command).pipe(
-			Match.tag("CreateNode", ({ nodeId, kind }) =>
-				Effect.succeed(ctx.registry.create(nodeId, kind)),
+): Effect.fn.Return<void, RenderError> {
+	yield* Match.value(command).pipe(
+		Match.tag("Batch", ({ commands }) =>
+			Effect.forEach(commands, (leaf) => applyLeaf(ctx, leaf), {
+				concurrency: 1,
+				discard: true,
+			}),
+		),
+		Match.tag("Heartbeat", () =>
+			Effect.fail(
+				new InvalidCommand({
+					widgetId: ctx.widgetId,
+					message: "Heartbeat must not be applied to the render tree",
+				}),
 			),
-			Match.tag("RemoveNode", ({ nodeId }) =>
-				Effect.succeed(ctx.registry.remove(nodeId)),
+		),
+		Match.tag("Ready", () =>
+			Effect.fail(
+				new InvalidCommand({
+					widgetId: ctx.widgetId,
+					message: "Ready must not be applied to the render tree",
+				}),
 			),
-			Match.tag("SetParent", ({ nodeId, parentId, order }) =>
-				Effect.succeed(ctx.target.setParent(nodeId, parentId!, order)),
-			),
-			Match.tag("SetTransform", ({ nodeId, ...rest }) => {
-				const transform: NodeTransform = {
-					...(rest.x === undefined ? {} : { x: rest.x }),
-					...(rest.y === undefined ? {} : { y: rest.y }),
-					...(rest.scaleX === undefined ? {} : { scaleX: rest.scaleX }),
-					...(rest.scaleY === undefined ? {} : { scaleY: rest.scaleY }),
-					...(rest.alpha === undefined ? {} : { alpha: rest.alpha }),
-					...(rest.rotation === undefined ? {} : { rotation: rest.rotation }),
-					...(rest.visible === undefined ? {} : { visible: rest.visible }),
-				};
-				return Effect.try({
-					try: () => ctx.target.setTransform(nodeId, transform),
-					catch: (_err) =>
-						new RenderFailed({
-							widgetId: ctx.widgetId,
-							message: `Render failed for ${nodeId}, set tranform command, pixi exploded`,
-							nodeId,
-						}),
-				});
-			}),
-			Match.tag("SetSprite", ({ nodeId, assetId }) => {
-				const texture = ctx.textures.getTexture(assetId);
-				return Effect.succeed(ctx.target.setSprite(nodeId, texture));
-			}),
-			Match.tag("SetAnimation", ({ nodeId, assetIds, fps, loop }) => {
-				const textures = assetIds.map((assetId) =>
-					ctx.textures.getTexture(assetId),
-				);
-				return Effect.succeed(
-					ctx.target.setAnimation(nodeId, textures, fps, loop),
-				);
-			}),
-			Match.tag("SetText", ({ nodeId, text, style }) => {
-				return Effect.succeed(ctx.target.setText(nodeId, text, style));
-			}),
-			Match.tag("AddFilter", ({ nodeId, effectId }) => {
-				const filter = ctx.effects.get(effectId, nodeId);
-				return Effect.succeed(ctx.target.addFilter(nodeId, effectId, filter));
-			}),
-			Match.tag("RemoveFilter", ({ nodeId, effectId }) => {
-				return Effect.succeed(ctx.target.removeFilter(nodeId, effectId));
-			}),
-			Match.tag("SetFilterParam", ({ nodeId, effectId, param, value }) => {
-				return Effect.succeed(
-					ctx.target.setFilterParam(nodeId, effectId, param, value),
-				);
-			}),
-			Match.tag("Batch", ({ commands }) =>
-				Effect.all(commands.map((command) => applyCommand(ctx, command))),
-			),
-			Match.tag("Heartbeat", () =>
-				Effect.fail(
-					new InvalidCommand({
-						widgetId: ctx.widgetId,
-						message: "Heartbeat command is not RenderCommand",
-					}),
-				),
-			),
-			Match.tag("Ready", () =>
-				Effect.fail(
-					new InvalidCommand({
-						widgetId: ctx.widgetId,
-						message: "Ready command is not RenderCommand",
-					}),
-				),
-			),
-			Match.exhaustive,
-			Effect.catchDefect((_) => {
-				return Effect.fail(
-					new RenderFailed({
-						widgetId: ctx.widgetId,
-						message: `Unexpected render error: widgetId ${ctx.widgetId}, command ${command._tag}`,
-					}),
-				);
-			}),
-		);
-	});
-}
+		),
+		Match.orElse((leaf) => applyLeaf(ctx, leaf)),
+	);
+});

@@ -27,7 +27,7 @@ export interface RenderState {
 	readonly widgetId: WidgetId;
 	createNode(nodeId: NodeId, kind: string): void;
 	removeNode(nodeId: NodeId): readonly NodeSnapshot[];
-	setParent(nodeId: NodeId, parentId: NodeId, order: number): void;
+	setParent(nodeId: NodeId, parentId: NodeId | null, order: number): void;
 	setTransform(nodeId: NodeId, transform: NodeTransform): void;
 	setSprite(nodeId: NodeId): void;
 	setAnimation(
@@ -122,10 +122,30 @@ export function createRenderState(widgetId: WidgetId): RenderState {
 			return removed;
 		},
 		setParent(nodeId, parentId, order) {
-			const node = requireNode(nodeId);
-			requireNode(parentId);
-			node.parentId = parentId;
-			node.order = order;
+			if (parentId !== null) {
+				if (parentId === nodeId) {
+					throw new InvalidCommand({
+						widgetId,
+						message: `Cannot set parent to self: ${nodeId}`,
+						nodeId,
+					});
+				}
+				if (collectSubtree(nodeId).includes(parentId)) {
+					throw new InvalidCommand({
+						widgetId,
+						message: `Cannot set parent to self: ${nodeId}`,
+						nodeId,
+					});
+				}
+				const node = requireNode(nodeId);
+				requireNode(parentId);
+				node.parentId = parentId;
+				node.order = order;
+			} else {
+				const node = requireNode(nodeId);
+				node.parentId = undefined;
+				node.order = order;
+			}
 		},
 		setTransform(nodeId, transform) {
 			const node = requireNode(nodeId);

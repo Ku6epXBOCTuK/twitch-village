@@ -1,5 +1,5 @@
 import type { NodeId, WidgetId } from "@tv/protocol";
-import { UnknownNode } from "@tv/protocol";
+import { InvalidCommand, UnknownNode } from "@tv/protocol";
 import type { Filter } from "pixi.js";
 import { describe, expect, it } from "vitest";
 import type { RenderTarget } from "./render-target";
@@ -40,6 +40,50 @@ export function describeRenderTargetContract(
 				.nodes.find((node) => node.nodeId === "child");
 			expect(child?.parentId).toBe("root");
 			expect(child?.order).toBe(3);
+		});
+
+		it("detaches a node to the root when the parent is null", () => {
+			const target = create(widgetId);
+			target.createNode(asNodeId("parent"), "container");
+			target.createNode(asNodeId("child"), "sprite");
+			target.setParent(asNodeId("child"), asNodeId("parent"), 0);
+
+			target.setParent(asNodeId("child"), null, 0);
+
+			const child = target
+				.snapshot()
+				.nodes.find((node) => node.nodeId === "child");
+			expect(child?.parentId).toBeUndefined();
+		});
+
+		it("rejects self-parenting with InvalidCommand", () => {
+			const target = create(widgetId);
+			target.createNode(asNodeId("avatar:1"), "sprite");
+
+			expect(() =>
+				target.setParent(asNodeId("avatar:1"), asNodeId("avatar:1"), 0),
+			).toThrow(InvalidCommand);
+
+			const node = target
+				.snapshot()
+				.nodes.find((item) => item.nodeId === "avatar:1");
+			expect(node?.parentId).toBeUndefined();
+		});
+
+		it("rejects a parent from the node's own subtree with InvalidCommand", () => {
+			const target = create(widgetId);
+			target.createNode(asNodeId("parent"), "container");
+			target.createNode(asNodeId("child"), "sprite");
+			target.setParent(asNodeId("child"), asNodeId("parent"), 0);
+
+			expect(() =>
+				target.setParent(asNodeId("parent"), asNodeId("child"), 0),
+			).toThrow(InvalidCommand);
+
+			const parent = target
+				.snapshot()
+				.nodes.find((item) => item.nodeId === "parent");
+			expect(parent?.parentId).toBeUndefined();
 		});
 
 		it("merges partial transforms", () => {

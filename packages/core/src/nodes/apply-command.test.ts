@@ -17,6 +17,7 @@ import {
 	type TextureSource,
 } from "./apply-command";
 import { createNodeRegistry } from "./node-registry";
+import type { RenderTarget } from "./render-target";
 
 const widgetId = "village" as WidgetId;
 
@@ -63,8 +64,26 @@ const createEffects = (): FilterSource & {
 	};
 };
 
-const setup = () => {
-	const target = createFakeRenderTarget({ widgetId });
+const setup = (options: { readonly crashOn?: CrashableMethod } = {}) => {
+	const fake = createFakeRenderTarget({ widgetId });
+	const { crashOn } = options;
+	// NOTE: registry must share ctx.target, and the crash arms after seeding
+	// because seeding itself calls the crashed method.
+	let armed = false;
+	const target: RenderTarget =
+		crashOn === undefined
+			? fake
+			: ({
+					...fake,
+					[crashOn]: (...args: unknown[]) => {
+						if (!armed) {
+							return (fake[crashOn] as (...args: unknown[]) => unknown)(
+								...args,
+							);
+						}
+						throw new Error("boom-42");
+					},
+				} as RenderTarget);
 	const registry = createNodeRegistry({ widgetId, target });
 	const textures = createTextures();
 	const effects = createEffects();
@@ -78,7 +97,8 @@ const setup = () => {
 
 	registry.create(rootId, "container");
 	registry.create(nodeId, "sprite");
-	const baseCallCount = target.calls.length;
+	const baseCallCount = fake.calls.length;
+	armed = true;
 
 	return {
 		ctx,
@@ -86,7 +106,7 @@ const setup = () => {
 		registry,
 		textures,
 		effects,
-		calls: () => target.calls.slice(baseCallCount),
+		calls: () => fake.calls.slice(baseCallCount),
 	};
 };
 
@@ -98,6 +118,75 @@ const runError = (
 	command: RenderCommand,
 ): Promise<RenderError> =>
 	Effect.runPromise(Effect.flip(applyCommand(ctx, command)));
+
+const expectTag: <Tag extends RenderError["_tag"]>(
+	error: RenderError,
+	tag: Tag,
+) => asserts error is Extract<RenderError, { _tag: Tag }> = (error, tag) => {
+	expect(error._tag).toBe(tag);
+};
+
+type CrashableMethod = Exclude<
+	keyof RenderTarget,
+	"widgetId" | "root" | "snapshot"
+>;
+
+const crashFixtures: ReadonlyArray<{
+	readonly method: CrashableMethod;
+	readonly command: RenderCommand;
+}> = [
+	{
+		method: "createNode",
+		command: { _tag: "CreateNode", nodeId: asNodeId("fresh"), kind: "sprite" },
+	},
+	{ method: "removeNode", command: { _tag: "RemoveNode", nodeId } },
+	{
+		method: "setParent",
+		command: { _tag: "SetParent", nodeId, parentId: rootId, order: 0 },
+	},
+	{ method: "setTransform", command: { _tag: "SetTransform", nodeId, x: 1 } },
+	{
+		method: "setSprite",
+		command: { _tag: "SetSprite", nodeId, assetId: asAssetId("tex") },
+	},
+	{
+		method: "setAnimation",
+		command: {
+			_tag: "SetAnimation",
+			nodeId,
+			assetIds: [asAssetId("walk_1")],
+			fps: 10,
+			loop: false,
+		},
+	},
+	{
+		method: "setText",
+		command: {
+			_tag: "SetText",
+			nodeId,
+			text: "hi",
+			style: { fontSize: 10, fill: "#000000", align: "left" },
+		},
+	},
+	{
+		method: "addFilter",
+		command: { _tag: "AddFilter", nodeId, effectId: asEffectId("glow") },
+	},
+	{
+		method: "removeFilter",
+		command: { _tag: "RemoveFilter", nodeId, effectId: asEffectId("glow") },
+	},
+	{
+		method: "setFilterParam",
+		command: {
+			_tag: "SetFilterParam",
+			nodeId,
+			effectId: asEffectId("glow"),
+			param: "intensity",
+			value: 1,
+		},
+	},
+];
 
 describe("applyCommand", () => {
 	it("CreateNode creates a node through the registry", async () => {
@@ -112,16 +201,30 @@ describe("applyCommand", () => {
 		expect(registry.has(created)).toBe(true);
 	});
 
+	it("rejects a duplicate CreateNode with InvalidCommand", async () => {
+		const { ctx, calls } = setup();
+
+		const error = await runError(ctx, {
+			_tag: "CreateNode",
+			nodeId,
+			kind: "sprite",
+		});
+
+		expectTag(error, "InvalidCommand");
+		expect(error.nodeId).toBe(nodeId);
+		expect(calls()).toEqual([]);
+	});
+
 	it("RemoveNode removes the node and its subtree", async () => {
-		const { ctx, registry, target } = setup();
+		const { ctx, registry, target, calls } = setup();
 		const child = asNodeId("avatar:1:hat");
 		registry.create(child, "sprite");
 		target.setParent(child, nodeId, 0);
-		const baseCallCount = target.calls.length;
+		const base = calls().length;
 
 		await run(ctx, { _tag: "RemoveNode", nodeId });
 
-		expect(target.calls.slice(baseCallCount)).toEqual([
+		expect(calls().slice(base)).toEqual([
 			{ method: "removeNode", args: [child] },
 			{ method: "removeNode", args: [nodeId] },
 		]);
@@ -138,7 +241,61 @@ describe("applyCommand", () => {
 		]);
 	});
 
-	it.todo("SetParent with null make node root???");
+	it("SetParent with null detaches the node to the widget root", async () => {
+		const { ctx, calls } = setup();
+
+		await run(ctx, { _tag: "SetParent", nodeId, parentId: rootId, order: 0 });
+		await run(ctx, { _tag: "SetParent", nodeId, parentId: null, order: 1 });
+
+		expect(calls()).toEqual([
+			{ method: "setParent", args: [nodeId, rootId, 0] },
+			{ method: "setParent", args: [nodeId, null, 1] },
+		]);
+	});
+
+	it("rejects SetParent to an unknown parent with UnknownNode", async () => {
+		const { ctx, calls } = setup();
+		const ghost = asNodeId("ghost");
+
+		const error = await runError(ctx, {
+			_tag: "SetParent",
+			nodeId,
+			parentId: ghost,
+			order: 0,
+		});
+
+		expectTag(error, "UnknownNode");
+		expect(error.nodeId).toBe(ghost);
+		expect(calls()).toEqual([]);
+	});
+
+	it("rejects SetParent of a node into its own subtree with InvalidCommand", async () => {
+		const { ctx } = setup();
+
+		await run(ctx, { _tag: "SetParent", nodeId, parentId: rootId, order: 0 });
+
+		const error = await runError(ctx, {
+			_tag: "SetParent",
+			nodeId: rootId,
+			parentId: nodeId,
+			order: 0,
+		});
+
+		expectTag(error, "InvalidCommand");
+	});
+
+	it("rejects self-parenting with InvalidCommand", async () => {
+		const { ctx } = setup();
+
+		const error = await runError(ctx, {
+			_tag: "SetParent",
+			nodeId,
+			parentId: nodeId,
+			order: 0,
+		});
+
+		expectTag(error, "InvalidCommand");
+	});
 
 	it("SetTransform forwards only the provided fields", async () => {
 		const { ctx, calls } = setup();
@@ -283,8 +440,27 @@ describe("applyCommand", () => {
 			],
 		});
 
-		expect(error._tag).toBe("UnknownNode");
+		expectTag(error, "UnknownNode");
 		expect(calls()).toEqual([]);
+	});
+
+	it("Batch keeps the commands applied before the failure", async () => {
+		const { ctx, calls } = setup();
+		const ghost = asNodeId("ghost");
+
+		const error = await runError(ctx, {
+			_tag: "Batch",
+			commands: [
+				{ _tag: "SetTransform", nodeId, x: 1 },
+				{ _tag: "SetTransform", nodeId: ghost, x: 2 },
+				{ _tag: "SetTransform", nodeId, x: 3 },
+			],
+		});
+
+		expectTag(error, "UnknownNode");
+		expect(calls()).toEqual([
+			{ method: "setTransform", args: [nodeId, { x: 1 }] },
+		]);
 	});
 
 	it("rejects an unknown node from the render target", async () => {
@@ -296,28 +472,21 @@ describe("applyCommand", () => {
 			x: 1,
 		});
 
-		expect(error._tag).toBe("UnknownNode");
+		expectTag(error, "UnknownNode");
 	});
 
-	it.todo("which commands can cause exceptions?");
+	describe("when the render target throws", () => {
+		it.each(crashFixtures)(
+			"propagates a crash in $method into RenderFailed with the cause",
+			async ({ method, command }) => {
+				const { ctx } = setup({ crashOn: method });
 
-	it("turns a Pixi exception into RenderFailed", async () => {
-		const { ctx, target } = setup();
-		const crashing = {
-			...target,
-			setTransform(): void {
-				throw new Error("pixi exploded");
+				const error = await runError(ctx, command);
+
+				expectTag(error, "RenderFailed");
+				expect(error.message).toContain("boom-42");
 			},
-		};
-
-		const error = await runError(
-			{ ...ctx, target: crashing },
-			{ _tag: "SetTransform", nodeId, x: 1 },
 		);
-
-		expect(error._tag).toBe("RenderFailed");
-		expect(error.message).toContain("pixi exploded");
-		expect(error).toMatchObject({ nodeId });
 	});
 
 	it("rejects Ready as a render command", async () => {
@@ -329,7 +498,7 @@ describe("applyCommand", () => {
 			protocolVersion: 1,
 		});
 
-		expect(error._tag).toBe("InvalidCommand");
+		expectTag(error, "InvalidCommand");
 	});
 
 	it("rejects Heartbeat as a render command", async () => {
@@ -337,6 +506,6 @@ describe("applyCommand", () => {
 
 		const error = await runError(ctx, { _tag: "Heartbeat", tick: 1 });
 
-		expect(error._tag).toBe("InvalidCommand");
+		expectTag(error, "InvalidCommand");
 	});
 });

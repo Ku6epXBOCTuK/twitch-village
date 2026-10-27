@@ -7,13 +7,13 @@ export interface RenderHandle {
 }
 
 export interface NodeTransform {
-	readonly x?: number;
-	readonly y?: number;
-	readonly scaleX?: number;
-	readonly scaleY?: number;
-	readonly rotation?: number;
-	readonly alpha?: number;
-	readonly visible?: boolean;
+	readonly x?: number | undefined;
+	readonly y?: number | undefined;
+	readonly scaleX?: number | undefined;
+	readonly scaleY?: number | undefined;
+	readonly rotation?: number | undefined;
+	readonly alpha?: number | undefined;
+	readonly visible?: boolean | undefined;
 }
 
 export interface TextStyleOptions {
@@ -57,7 +57,7 @@ export interface RenderTarget {
 	readonly root: Container;
 	createNode(nodeId: NodeId, kind: string): RenderHandle;
 	removeNode(nodeId: NodeId): void;
-	setParent(nodeId: NodeId, parentId: NodeId, order: number): void;
+	setParent(nodeId: NodeId, parentId: NodeId | null, order: number): void;
 	setTransform(nodeId: NodeId, transform: NodeTransform): void;
 	setSprite(nodeId: NodeId, texture: Texture): void;
 	setAnimation(

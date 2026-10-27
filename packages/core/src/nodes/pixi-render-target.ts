@@ -1,13 +1,13 @@
-import type { NodeId, WidgetId } from "@tv/protocol";
+import { InvalidCommand, type NodeId, type WidgetId } from "@tv/protocol";
 import type { Filter, Texture } from "pixi.js";
 import { AnimatedSprite, Container, Sprite, Text } from "pixi.js";
+import { createRenderState } from "./render-state";
 import type {
 	RenderHandle,
 	RenderSnapshot,
 	RenderTarget,
 	TextStyleOptions,
 } from "./render-target";
-import { createRenderState } from "./render-state";
 
 export interface PixiRenderTargetOptions {
 	readonly widgetId: WidgetId;
@@ -71,10 +71,30 @@ export function createPixiRenderTarget(
 			}
 		},
 		setParent(nodeId, parentId, order) {
+			if (nodeId === parentId) {
+				throw new InvalidCommand({
+					widgetId: options.widgetId,
+					message: "Cannot set a node as its own parent",
+					nodeId,
+				});
+			}
+			if (nodeId === parentId) {
+				throw new InvalidCommand({
+					widgetId: options.widgetId,
+					message: "Cannot set a node as its own parent",
+					nodeId,
+				});
+			}
 			state.setParent(nodeId, parentId, order);
-			const parentView = requireView(parentId);
-			const index = Math.max(0, Math.min(order, parentView.children.length));
-			parentView.addChildAt(requireView(nodeId), index);
+
+			if (parentId === null) {
+				const index = Math.max(0, Math.min(order, root.children.length));
+				root.addChildAt(requireView(nodeId), index);
+			} else {
+				const parentView = requireView(parentId);
+				const index = Math.max(0, Math.min(order, parentView.children.length));
+				parentView.addChildAt(requireView(nodeId), index);
+			}
 		},
 		setTransform(nodeId, transform) {
 			state.setTransform(nodeId, transform);

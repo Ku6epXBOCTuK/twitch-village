@@ -80,6 +80,7 @@ export const LeafCommandSchema = Schema.Union([
 	RemoveFilter,
 	SetFilterParam,
 ]);
+export type LeafCommand = Schema.Schema.Type<typeof LeafCommandSchema>;
 
 export const Batch = Schema.TaggedStruct("Batch", {
 	commands: Schema.Array(LeafCommandSchema).check(Schema.isMaxLength(2048)),
