@@ -56,7 +56,8 @@ export interface RenderTarget {
 	readonly widgetId: WidgetId;
 	readonly root: Container;
 	createNode(nodeId: NodeId, kind: NodeKind): RenderHandle;
-	removeNode(nodeId: NodeId): void;
+	has(nodeId: NodeId): boolean;
+	removeNode(nodeId: NodeId): readonly NodeId[];
 	setParent(nodeId: NodeId, parentId: NodeId | null, order: number): void;
 	setTransform(nodeId: NodeId, transform: NodeTransform): void;
 	setSprite(nodeId: NodeId, texture: Texture): void;

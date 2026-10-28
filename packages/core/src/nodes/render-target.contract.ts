@@ -189,11 +189,34 @@ export function describeRenderTargetContract(
 			const target = create(widgetId);
 			target.createNode(asNodeId("root"), "container");
 			target.createNode(asNodeId("child"), "sprite");
+			target.createNode(asNodeId("survivor"), "sprite");
 			target.setParent(asNodeId("child"), asNodeId("root"), 0);
 
-			target.removeNode(asNodeId("root"));
+			const removed = target.removeNode(asNodeId("root"));
 
-			expect(target.snapshot().nodes).toHaveLength(0);
+			expect(target.snapshot().nodes.map((node) => node.nodeId)).toEqual([
+				"survivor",
+			]);
+			expect([...removed].sort()).toEqual(["child", "root"]);
+			expect(target.has(asNodeId("root"))).toBe(false);
+			expect(target.has(asNodeId("child"))).toBe(false);
+			expect(target.has(asNodeId("survivor"))).toBe(true);
+		});
+
+		it("reports whether a node exists", () => {
+			const target = create(widgetId);
+
+			expect(target.has(asNodeId("avatar:1"))).toBe(false);
+
+			target.createNode(asNodeId("avatar:1"), "sprite");
+
+			expect(target.has(asNodeId("avatar:1"))).toBe(true);
+		});
+
+		it("rejects removing an unknown node", () => {
+			const target = create(widgetId);
+
+			expect(() => target.removeNode(asNodeId("ghost"))).toThrow(UnknownNode);
 		});
 
 		it("rejects operations on an unknown node", () => {

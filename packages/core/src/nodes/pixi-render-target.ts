@@ -8,7 +8,6 @@ import type { Filter, Texture } from "pixi.js";
 import { AnimatedSprite, Container, Sprite, Text } from "pixi.js";
 import { createRenderState } from "./render-state";
 import type {
-	RenderHandle,
 	RenderSnapshot,
 	RenderTarget,
 	TextStyleOptions,
@@ -24,7 +23,6 @@ export function createPixiRenderTarget(
 	const state = createRenderState(options.widgetId);
 	const root = new Container();
 	const views = new Map<NodeId, Container>();
-	const handles = new Map<NodeId, RenderHandle>();
 	const contents = new Map<NodeId, Container>();
 	const filters = new Map<NodeId, Map<EffectId, Filter>>();
 
@@ -59,9 +57,10 @@ export function createPixiRenderTarget(
 			const view = new Container();
 			root.addChild(view);
 			views.set(nodeId, view);
-			const handle: RenderHandle = { nodeId, kind };
-			handles.set(nodeId, handle);
-			return handle;
+			return { nodeId, kind };
+		},
+		has(nodeId) {
+			return state.has(nodeId);
 		},
 		removeNode(nodeId) {
 			const removed = state.removeNode(nodeId);
@@ -70,10 +69,10 @@ export function createPixiRenderTarget(
 			view?.destroy({ children: true });
 			for (const snapshot of removed) {
 				views.delete(snapshot.nodeId);
-				handles.delete(snapshot.nodeId);
 				contents.delete(snapshot.nodeId);
 				filters.delete(snapshot.nodeId);
 			}
+			return removed.map((snapshot) => snapshot.nodeId);
 		},
 		setParent(nodeId, parentId, order) {
 			if (nodeId === parentId) {

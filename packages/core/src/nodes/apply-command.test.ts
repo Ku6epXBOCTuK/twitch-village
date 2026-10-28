@@ -19,7 +19,6 @@ import {
 	type TextureSource,
 } from "./apply-command";
 import type { RenderError } from "../errors";
-import { createNodeRegistry } from "./node-registry";
 import type { RenderTarget } from "./render-target";
 
 const widgetId = "village" as WidgetId;
@@ -60,20 +59,27 @@ const createEffects = (): FilterSource & {
 		readonly param: string;
 		readonly value: number;
 	}>;
+	readonly released: NodeId[];
 } => {
 	const requested: Array<{ effectId: EffectId; nodeId: NodeId }> = [];
 	const params: Array<{ effectId: EffectId; param: string; value: number }> =
 		[];
+	const released: NodeId[] = [];
 
 	return {
 		requested,
 		params,
+		released,
 		get(effectId: EffectId, nodeId: NodeId) {
 			requested.push({ effectId, nodeId });
 			return Effect.succeed({ effectId, nodeId } as unknown as Filter);
 		},
 		setParam(effectId: EffectId, param: string, value: number) {
 			params.push({ effectId, param, value });
+			return Effect.void;
+		},
+		release(nodeId: NodeId) {
+			released.push(nodeId);
 			return Effect.void;
 		},
 	};
@@ -99,26 +105,23 @@ const setup = (options: { readonly crashOn?: CrashableMethod } = {}) => {
 						throw new Error("boom-42");
 					},
 				} as RenderTarget);
-	const registry = createNodeRegistry({ widgetId, target });
 	const textures = createTextures();
 	const effects = createEffects();
 	const ctx: ApplyCommandContext = {
 		widgetId,
-		registry,
 		target,
 		textures,
 		effects,
 	};
 
-	registry.create(rootId, "container");
-	registry.create(nodeId, "sprite");
+	target.createNode(rootId, "container");
+	target.createNode(nodeId, "sprite");
 	const baseCallCount = fake.calls.length;
 	armed = true;
 
 	return {
 		ctx,
 		target,
-		registry,
 		textures,
 		effects,
 		calls: () => fake.calls.slice(baseCallCount),
@@ -152,7 +155,7 @@ const expectTag: <Tag extends RenderError["_tag"]>(
 
 type CrashableMethod = Exclude<
 	keyof RenderTarget,
-	"widgetId" | "root" | "snapshot"
+	"widgetId" | "root" | "snapshot" | "has"
 >;
 
 const crashFixtures: ReadonlyArray<{
@@ -213,8 +216,8 @@ const crashFixtures: ReadonlyArray<{
 ];
 
 describe("applyCommand", () => {
-	it("CreateNode creates a node through the registry", async () => {
-		const { ctx, registry, calls } = setup();
+	it("CreateNode creates a node through the render target", async () => {
+		const { ctx, target, calls } = setup();
 		const created = asNodeId("label:1");
 
 		await run(ctx, { _tag: "CreateNode", nodeId: created, kind: "text" });
@@ -222,7 +225,7 @@ describe("applyCommand", () => {
 		expect(calls()).toEqual([
 			{ method: "createNode", args: [created, "text"] },
 		]);
-		expect(registry.has(created)).toBe(true);
+		expect(target.has(created)).toBe(true);
 	});
 
 	it("rejects a duplicate CreateNode with InvalidCommand", async () => {
@@ -239,20 +242,21 @@ describe("applyCommand", () => {
 		expect(calls()).toEqual([]);
 	});
 
-	it("RemoveNode removes the node and its subtree", async () => {
-		const { ctx, registry, target, calls } = setup();
+	it("RemoveNode removes the subtree and releases its filters", async () => {
+		const { ctx, target, effects, calls } = setup();
 		const child = asNodeId("avatar:1:hat");
-		registry.create(child, "sprite");
+		target.createNode(child, "sprite");
 		target.setParent(child, nodeId, 0);
 		const base = calls().length;
 
 		await run(ctx, { _tag: "RemoveNode", nodeId });
 
 		expect(calls().slice(base)).toEqual([
-			{ method: "removeNode", args: [child] },
 			{ method: "removeNode", args: [nodeId] },
 		]);
-		expect(registry.has(nodeId)).toBe(false);
+		expect(target.has(nodeId)).toBe(false);
+		expect(target.has(child)).toBe(false);
+		expect(effects.released).toEqual([nodeId, child]);
 	});
 
 	it("SetParent reparents the node with the requested order", async () => {
@@ -644,6 +648,7 @@ describe("applyCommand", () => {
 			...ctx,
 			effects: {
 				get: ctx.effects.get,
+				release: ctx.effects.release,
 				setParam: () =>
 					Effect.fail(
 						new InvalidEffectParam({

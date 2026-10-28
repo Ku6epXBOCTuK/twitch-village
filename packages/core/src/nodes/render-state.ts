@@ -26,6 +26,7 @@ interface NodeState {
 export interface RenderState {
 	readonly widgetId: WidgetId;
 	createNode(nodeId: NodeId, kind: NodeKind): void;
+	has(nodeId: NodeId): boolean;
 	removeNode(nodeId: NodeId): readonly NodeSnapshot[];
 	setParent(nodeId: NodeId, parentId: NodeId | null, order: number): void;
 	setTransform(nodeId: NodeId, transform: NodeTransform): void;
@@ -110,6 +111,9 @@ export function createRenderState(widgetId: WidgetId): RenderState {
 				filterIds: [],
 				filterParams: [],
 			});
+		},
+		has(nodeId) {
+			return nodes.has(nodeId);
 		},
 		removeNode(nodeId) {
 			requireNode(nodeId);

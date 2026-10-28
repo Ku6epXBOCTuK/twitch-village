@@ -218,8 +218,7 @@ typescript 5.9, vitest 5.0, eslint 10.13, @assetpack/core 1.7. Линт гран
 ### Шаг 30. Contract-тест рендер-цели и чекпоинт
 
 Файлы: `packages/core/src/nodes/render-target.contract.ts` и тесты
-`apply-command`, `command-bus`, `node-registry`, `effect-registry`,
-`widget-host`.
+`apply-command`, `command-bus`, `effect-registry`, `widget-host`.
 
 Готово: `pnpm -F @tv/core test` зелёный; ни один тест не требует GPU.
 
@@ -272,7 +271,8 @@ typescript 5.9, vitest 5.0, eslint 10.13, @assetpack/core 1.7. Линт гран
 - Новый зритель → `CreateNode` × 3 (контейнер/спрайт/текст) + `SetParent` +
   `SetSprite`/`SetText` + `SetTransform`.
 - Изменение позиции → `SetTransform`; смена состояния → `SetAnimation`/`alpha`.
-- Удаление → `RemoveNode` для контейнера: поддерево уносит `NodeRegistry`.
+- Удаление → `RemoveNode` для контейнера: поддерево уносит
+  `RenderTarget.removeNode`, фильтры освобождает `EffectRegistry.release`.
 - Всё упаковывается в один `Batch` на тик. Команды внутри независимы и не
   опираются на побочный эффект соседних (`ARCHITECTURE.md` §4.2): пачка
   продолжается после сбоя одной команды.
@@ -563,6 +563,6 @@ pnpm build
 3. `@effect/rpc` при росте протокола.
 4. Второй виджет (например, алерты). Вместе с ним появляются per-widget слои
    (`Layer.fresh` + `Effect.provide` на активацию) и widget-scoped
-   `NodeRegistry`/`CommandBus`/`WidgetHost` (`ARCHITECTURE.md` §11.1).
+   `RenderTarget`/`CommandBus`/`WidgetHost` (`ARCHITECTURE.md` §11.1).
 5. WASM-виджет на том же протоколе.
 6. Персистентность деревни между перезапусками.

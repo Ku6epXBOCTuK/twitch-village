@@ -15,7 +15,6 @@ import {
 import { Effect, Match } from "effect";
 import type { Filter, Texture } from "pixi.js";
 import { isContractError, type RenderError } from "../errors";
-import type { NodeRegistry } from "./node-registry";
 import type { RenderTarget } from "./render-target";
 
 function toRenderFailed(
@@ -44,11 +43,11 @@ export interface FilterSource {
 		param: string,
 		value: number,
 	): Effect.Effect<void, EffectNotFound | InvalidEffectParam>;
+	release(nodeId: NodeId): Effect.Effect<void>;
 }
 
 export interface ApplyCommandContext {
 	readonly widgetId: WidgetId;
-	readonly registry: NodeRegistry;
 	readonly target: RenderTarget;
 	readonly textures: TextureSource;
 	readonly effects: FilterSource;
@@ -84,7 +83,7 @@ const applyLeaf = Effect.fnUntraced(function* (
 	}
 
 	if (command._tag !== "CreateNode") {
-		if (!ctx.registry.has(command.nodeId)) {
+		if (!ctx.target.has(command.nodeId)) {
 			return yield* Effect.fail(
 				new UnknownNode({
 					widgetId: ctx.widgetId,
@@ -98,7 +97,7 @@ const applyLeaf = Effect.fnUntraced(function* (
 	if (
 		command._tag === "SetParent" &&
 		command.parentId !== null &&
-		!ctx.registry.has(command.parentId)
+		!ctx.target.has(command.parentId)
 	) {
 		return yield* Effect.fail(
 			new UnknownNode({
@@ -111,9 +110,19 @@ const applyLeaf = Effect.fnUntraced(function* (
 
 	yield* Match.valueTags(command, {
 		CreateNode: ({ nodeId, kind }) =>
-			attemptForeign(() => ctx.registry.create(nodeId, kind)),
+			attemptForeign(() => ctx.target.createNode(nodeId, kind)),
 		RemoveNode: ({ nodeId }) =>
-			attemptForeign(() => ctx.registry.remove(nodeId)),
+			Effect.flatMap(
+				attemptForeign(() => ctx.target.removeNode(nodeId)),
+				(removed) =>
+					Effect.forEach(
+						removed,
+						(removedId) => ctx.effects.release(removedId),
+						{
+							discard: true,
+						},
+					),
+			),
 		SetParent: ({ nodeId, parentId, order }) =>
 			attemptForeign(() => ctx.target.setParent(nodeId, parentId, order)),
 		SetTransform: ({ nodeId, _tag, ...rest }) =>

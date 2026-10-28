@@ -35,13 +35,17 @@ export function createFakeRenderTarget(
 		root: {} as Container,
 		calls,
 		createNode(nodeId: NodeId, kind: NodeKind): RenderHandle {
-			record("createNode", [nodeId, kind]);
 			state.createNode(nodeId, kind);
+			record("createNode", [nodeId, kind]);
 			return { nodeId, kind };
 		},
-		removeNode(nodeId: NodeId): void {
+		has(nodeId: NodeId): boolean {
+			return state.has(nodeId);
+		},
+		removeNode(nodeId: NodeId): readonly NodeId[] {
+			const removed = state.removeNode(nodeId);
 			record("removeNode", [nodeId]);
-			state.removeNode(nodeId);
+			return removed.map((snapshot) => snapshot.nodeId);
 		},
 		setParent(nodeId: NodeId, parentId: NodeId, order: number): void {
 			record("setParent", [nodeId, parentId, order]);
