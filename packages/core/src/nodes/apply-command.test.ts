@@ -50,16 +50,27 @@ const createTextures = (): TextureSource & {
 const createEffects = (): FilterSource & {
 	readonly requested: ReadonlyArray<{
 		readonly effectId: EffectId;
-		readonly nodeKey: string;
+		readonly nodeId: NodeId;
+	}>;
+	readonly params: ReadonlyArray<{
+		readonly effectId: EffectId;
+		readonly param: string;
+		readonly value: number;
 	}>;
 } => {
-	const requested: Array<{ effectId: EffectId; nodeKey: string }> = [];
+	const requested: Array<{ effectId: EffectId; nodeId: NodeId }> = [];
+	const params: Array<{ effectId: EffectId; param: string; value: number }> =
+		[];
 
 	return {
 		requested,
-		get(effectId: EffectId, nodeKey: string): Filter {
-			requested.push({ effectId, nodeKey });
-			return { effectId, nodeKey } as unknown as Filter;
+		params,
+		get(effectId: EffectId, nodeId: NodeId): Filter {
+			requested.push({ effectId, nodeId });
+			return { effectId, nodeId } as unknown as Filter;
+		},
+		setParam(effectId: EffectId, param: string, value: number): void {
+			params.push({ effectId, param, value });
 		},
 	};
 };
@@ -365,18 +376,18 @@ describe("applyCommand", () => {
 		]);
 	});
 
-	it("AddFilter resolves the filter for the node key", async () => {
+	it("AddFilter resolves the filter for the node", async () => {
 		const { ctx, effects, calls } = setup();
 		const effectId = asEffectId("glow");
 
 		await run(ctx, { _tag: "AddFilter", nodeId, effectId });
 
-		expect(effects.requested).toEqual([{ effectId, nodeKey: nodeId }]);
+		expect(effects.requested).toEqual([{ effectId, nodeId }]);
 		expect(calls()).toHaveLength(1);
 		expect(calls()[0]?.method).toBe("addFilter");
 		expect(calls()[0]?.args[0]).toBe(nodeId);
 		expect(calls()[0]?.args[1]).toBe(effectId);
-		expect(calls()[0]?.args[2]).toMatchObject({ effectId, nodeKey: nodeId });
+		expect(calls()[0]?.args[2]).toMatchObject({ effectId, nodeId });
 	});
 
 	it("RemoveFilter forwards the effect id", async () => {
@@ -390,8 +401,8 @@ describe("applyCommand", () => {
 		]);
 	});
 
-	it("SetFilterParam forwards the uniform value", async () => {
-		const { ctx, calls } = setup();
+	it("SetFilterParam validates the uniform value before applying it", async () => {
+		const { ctx, effects, calls } = setup();
 		const effectId = asEffectId("glow");
 
 		await run(ctx, {
@@ -402,6 +413,9 @@ describe("applyCommand", () => {
 			value: 0.7,
 		});
 
+		expect(effects.params).toEqual([
+			{ effectId, param: "intensity", value: 0.7 },
+		]);
 		expect(calls()).toEqual([
 			{
 				method: "setFilterParam",

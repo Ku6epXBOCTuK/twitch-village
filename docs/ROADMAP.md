@@ -179,23 +179,54 @@ createCommandBus(config: {
 снятым, повтор проходит), выгрузку незагруженного бандла (no-op), промах по ID
 на каждом из трёх условий (с фейковым бэкендом).
 
-### Шаг 23. EffectRegistry
+### Шаг 23. EffectRegistry (выполнено)
 
 Файлы: `packages/core/src/effects/effect-manifest.ts`,
-`packages/core/src/effects/effect-registry.ts`.
+`packages/core/src/effects/effect-registry.ts`; фейк компилятора —
+`packages/core/src/testing/fake-effect-compiler.ts`.
 
-- `EffectManifestSchema`: массив
-  `{ effectId, vertex, fragment, params: { name, min, max, default } }`.
-- `register(manifest)` — валидация схемы, без компиляции.
-- `get(effectId, nodeKey)` — ленивая компиляция через `Filter.from`/`GlProgram`,
-  кэш по `(effectId, nodeKey)`.
-- `setParam(instance, name, value)` — проверка по диапазону из манифеста →
-  `InvalidEffectParam`.
-- Ошибка компиляции → `EffectCompileFailed`, эффект помечен и больше не
-  компилируется.
+Схема манифеста:
+`{ effects: [{ effectId, vertex, fragment, params: [{ name, min, max, default }] }] }`.
+Проверка схемы — на границе загрузки (шаг 26), а `register` проверяет смысл:
+дубликат `effectId`, `default` вне `[min, max]`, перевёрнутые границы. Это
+`Error` конфигурации, а не `RenderError`: манифест собирается на сборке, битый
+манифест — ошибка разработчика, а не событие виджета.
 
-Готово: тесты на неизвестный `effectId`, значение вне диапазона, кэш возвращает
-один и тот же экземпляр. Компиляция в тестах мокается.
+```ts
+interface EffectCompiler {
+  compile(definition: EffectDefinition): Filter;
+}
+interface EffectRegistry extends FilterSource {
+  register(manifest: EffectManifest): void;
+  get(effectId: EffectId, nodeId: NodeId): Filter;
+  setParam(effectId: EffectId, param: string, value: number): void;
+  isBroken(effectId: EffectId): boolean;
+  clear(): void;
+}
+```
+
+- `register` ничего не компилирует; `get` компилирует при первом обращении и
+  кэширует экземпляр по `(effectId, nodeId)`, поэтому два узла не делят один
+  `Filter`. Ключ — брендированный `NodeId`, без разжалования до `string`: реестр
+  живёт на виджет, `clear()` при деактивации, префикс экземпляра в ключе не
+  нужен.
+- Ошибка компиляции → `EffectCompileFailed`; сломанным считается эффект целиком,
+  а не узел, повторных компиляций нет до `clear()`.
+- `setParam` только валидирует: неизвестный `effectId` → `EffectNotFound`,
+  неизвестный параметр или значение вне границ → `InvalidEffectParam`. Установка
+  uniform'а остаётся в `RenderTarget`.
+- Параметры `vec3` и авто-параметры (`uTime`) в v1 отсутствуют:
+  `SetFilterParam.value` в протоколе — `Schema.Number`. Расширение до
+  `Number | Array(Number)` вместе с `uColor` — на шаге 41, с инкрементом
+  `PROTOCOL_VERSION`.
+- Деактивация виджета — `clear()`: экземпляры и пометки о сломанном
+  сбрасываются.
+
+`apply-command` обязан звать `ctx.effects.setParam(...)` перед
+`target.setFilterParam(...)`, иначе границы не проверяются.
+
+Готово: тесты на ленивую компиляцию, кэш по узлу, отсутствие повторов после
+`EffectCompileFailed`, границы параметров и конфигурационные ошибки манифеста.
 
 ### Шаг 24. Статус и счётчики
 

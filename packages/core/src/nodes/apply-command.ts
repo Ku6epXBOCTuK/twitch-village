@@ -9,6 +9,7 @@ import {
 	type AssetId,
 	type EffectId,
 	type LeafCommand,
+	type NodeId,
 	type RenderCommand,
 	type WidgetId,
 } from "@tv/protocol";
@@ -66,7 +67,8 @@ export interface TextureSource {
 }
 
 export interface FilterSource {
-	get(effectId: EffectId, nodeKey: string): Filter;
+	get(effectId: EffectId, nodeId: NodeId): Filter;
+	setParam(effectId: EffectId, param: string, value: number): void;
 }
 
 export interface ApplyCommandContext {
@@ -147,8 +149,12 @@ const applyLeaf = Effect.fnUntraced(function* (
 			),
 		RemoveFilter: ({ nodeId, effectId }) =>
 			attempt(() => ctx.target.removeFilter(nodeId, effectId)),
-		SetFilterParam: ({ nodeId, effectId, param, value }) =>
-			attempt(() => ctx.target.setFilterParam(nodeId, effectId, param, value)),
+		SetFilterParam: ({ nodeId, effectId, param, value }) => {
+			ctx.effects.setParam(effectId, param, value);
+			return attempt(() =>
+				ctx.target.setFilterParam(nodeId, effectId, param, value),
+			);
+		},
 	});
 });
 
