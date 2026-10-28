@@ -126,12 +126,15 @@ describe("AssetRegistry", () => {
 		expect(callsOf(backend, "loadBundle")).toEqual([["village"]]);
 	});
 
-	it("keeps a bundle unloaded when the load fails", async () => {
+	it("reports a backend load failure as BundleLoadFailed", async () => {
 		const { registry, backend } = setup();
-		const failure = new Error("network is down");
-		backend.failures.set("village", failure);
+		backend.failures.set("village", new Error("network is down"));
 
-		await expect(registry.loadBundle("village")).rejects.toThrow(failure);
+		await expect(registry.loadBundle("village")).rejects.toMatchObject({
+			_tag: "BundleLoadFailed",
+			bundleId: "village",
+			message: expect.stringContaining("network is down"),
+		});
 		expect(registry.isLoaded("village")).toBe(false);
 
 		backend.failures.delete("village");

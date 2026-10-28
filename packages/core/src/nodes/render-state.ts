@@ -133,7 +133,7 @@ export function createRenderState(widgetId: WidgetId): RenderState {
 				if (collectSubtree(nodeId).includes(parentId)) {
 					throw new InvalidCommand({
 						widgetId,
-						message: `Cannot set parent to self: ${nodeId}`,
+						message: `Cannot move a node under its own descendant: ${nodeId}`,
 						nodeId,
 					});
 				}

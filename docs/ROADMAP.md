@@ -52,7 +52,7 @@ typescript 5.9, vitest 5.0, eslint 10.13, @assetpack/core 1.7. Линт гран
   схемах (`alpha` 0..1, `fps` 1..60);
 - `events.ts` — `WidgetEvent`, `ViewerEvent`, конверты `CoreToWidget` /
   `WidgetToCore` с `protocolVersion`;
-- `errors.ts` — 11 `Data.TaggedError` из раздела 6 архитектуры;
+- `errors.ts` — 12 `Data.TaggedError` из раздела 6 архитектуры;
 - `transport.ts` — `Transport<Outgoing, Incoming>` и `createDirectTransportPair`
   для тестов.
 
@@ -96,8 +96,8 @@ typescript 5.9, vitest 5.0, eslint 10.13, @assetpack/core 1.7. Линт гран
   `clear()`, `setParam` проверяет имя параметра и границы. Ошибки манифеста —
   обычный `Error`: это ошибка разработчика, а не событие виджета.
 
-Открытая находка: у `AssetRegistry` нет типа ошибки для отказа загрузки бандла,
-а `getTexture` бросает при ещё не загруженном бандле (TV-30).
+Отказ загрузки бандла — `BundleLoadFailed`: бандл остаётся снятым, повтор при
+следующей активации (TV-30).
 
 ### Шаг 24. Статус и счётчики
 

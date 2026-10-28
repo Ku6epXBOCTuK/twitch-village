@@ -1,4 +1,9 @@
-import { AssetNotFound, type AssetId, type WidgetId } from "@tv/protocol";
+import {
+	AssetNotFound,
+	BundleLoadFailed,
+	type AssetId,
+	type WidgetId,
+} from "@tv/protocol";
 import type { Texture } from "pixi.js";
 import type { AssetManifest } from "./manifest";
 
@@ -73,7 +78,15 @@ export function createAssetRegistry(
 		},
 		loadBundle: async (bundleId: string) => {
 			if (!bundleLoaded.has(bundleId)) {
-				await backend.loadBundle(bundleId);
+				try {
+					await backend.loadBundle(bundleId);
+				} catch (error) {
+					throw new BundleLoadFailed({
+						widgetId: options.widgetId,
+						bundleId,
+						message: `Bundle ${bundleId} failed to load: ${error instanceof Error ? error.message : String(error)}`,
+					});
+				}
 				bundleLoaded.add(bundleId);
 			}
 		},

@@ -78,13 +78,6 @@ export function createPixiRenderTarget(
 					nodeId,
 				});
 			}
-			if (nodeId === parentId) {
-				throw new InvalidCommand({
-					widgetId: options.widgetId,
-					message: "Cannot set a node as its own parent",
-					nodeId,
-				});
-			}
 			state.setParent(nodeId, parentId, order);
 
 			if (parentId === null) {

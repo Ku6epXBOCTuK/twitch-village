@@ -67,3 +67,9 @@ export class ProtocolMismatch extends Data.TaggedError("ProtocolMismatch")<{
 	expectedVersion: number;
 	actualVersion: number;
 }> {}
+
+export class BundleLoadFailed extends Data.TaggedError("BundleLoadFailed")<{
+	widgetId: WidgetId;
+	message: string;
+	bundleId: string;
+}> {}

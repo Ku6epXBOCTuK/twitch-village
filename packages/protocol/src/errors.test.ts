@@ -2,6 +2,7 @@ import { Effect, Exit } from "effect";
 import { describe, expect, it } from "vitest";
 import {
 	AssetNotFound,
+	BundleLoadFailed,
 	EffectCompileFailed,
 	EffectNotFound,
 	InvalidCommand,
@@ -48,6 +49,11 @@ describe("protocol errors", () => {
 				expectedVersion: 1,
 				actualVersion: 2,
 			}),
+			new BundleLoadFailed({
+				widgetId,
+				message: "bundle failed to load",
+				bundleId: "village",
+			}),
 		];
 
 		expect(errors.map((error) => error._tag)).toEqual([
@@ -62,6 +68,7 @@ describe("protocol errors", () => {
 			"WidgetTimeout",
 			"WidgetCrashed",
 			"ProtocolMismatch",
+			"BundleLoadFailed",
 		]);
 	});
 
@@ -158,6 +165,16 @@ describe("protocol errors", () => {
 
 		expect(error.expectedVersion).toBe(1);
 		expect(error.actualVersion).toBe(2);
+	});
+
+	it("BundleLoadFailed keeps bundleId", () => {
+		const error = new BundleLoadFailed({
+			widgetId,
+			message: "bundle failed to load",
+			bundleId: "village",
+		});
+
+		expect(error.bundleId).toBe("village");
 	});
 
 	it("fails the effect with the error instance", async () => {
