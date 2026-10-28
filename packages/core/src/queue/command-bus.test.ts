@@ -89,6 +89,7 @@ describe("CommandBus", () => {
 		bus.push(village, commands(5));
 
 		bus.drain(village);
+		bus.commit(village, 2);
 
 		expect(bus.stats(village)).toEqual({
 			queued: 3,
@@ -97,6 +98,7 @@ describe("CommandBus", () => {
 		});
 
 		bus.drain(village);
+		bus.commit(village, 2);
 
 		expect(bus.stats(village)).toEqual({
 			queued: 1,
@@ -135,6 +137,7 @@ describe("CommandBus", () => {
 		const bus = createCommandBus(config());
 		bus.push(village, commands(3));
 		bus.drain(village);
+		bus.commit(village, 3);
 
 		bus.push(village, commands(2, "pending"));
 		bus.clear(village);
@@ -168,5 +171,61 @@ describe("CommandBus", () => {
 			dropped: 0,
 			processed: 0,
 		});
+	});
+
+	it("does not count a command before the caller applies it", () => {
+		const bus = createCommandBus(config());
+		bus.push(village, commands(3));
+
+		expect(bus.drain(village)).toHaveLength(3);
+		expect(bus.stats(village).processed).toBe(0);
+
+		bus.commit(village, 2);
+
+		expect(bus.stats(village).processed).toBe(2);
+
+		bus.commit(village, 0);
+
+		expect(bus.stats(village).processed).toBe(2);
+	});
+
+	it("returns a shared empty list when the queue is empty", () => {
+		const bus = createCommandBus(config());
+		bus.push(village, commands(1));
+		bus.drain(village);
+
+		expect(bus.drain(village)).toBe(bus.drain(village));
+	});
+
+	it("rejects an invalid configuration", () => {
+		expect(() => createCommandBus(config({ maxQueueLength: 0 }))).toThrow(
+			/maxQueueLength/,
+		);
+		expect(() => createCommandBus(config({ maxCommandsPerFrame: -1 }))).toThrow(
+			/maxCommandsPerFrame/,
+		);
+		expect(() =>
+			createCommandBus(config({ maxCommandsPerFrame: 1.5 })),
+		).toThrow(/maxCommandsPerFrame/);
+		expect(() => createCommandBus(config({ maxDrainMs: -1 }))).toThrow(
+			/maxDrainMs/,
+		);
+		expect(() => createCommandBus(config({ maxDrainMs: Number.NaN }))).toThrow(
+			/maxDrainMs/,
+		);
+	});
+
+	it("accepts a zero drain budget", () => {
+		const bus = createCommandBus(config({ maxDrainMs: 0 }));
+		bus.push(village, commands(1));
+
+		expect(bus.drain(village)).toHaveLength(1);
+	});
+
+	it("rejects committing a non-integer count", () => {
+		const bus = createCommandBus(config());
+
+		expect(() => bus.commit(village, -1)).toThrow(/applied/);
+		expect(() => bus.commit(village, 1.5)).toThrow(/applied/);
 	});
 });

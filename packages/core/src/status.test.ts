@@ -8,6 +8,8 @@ import { describe, expect, it } from "vitest";
 import {
 	createStatusStore,
 	type CounterName,
+	type ErrorCounterName,
+	type StatusStore,
 	type WidgetStatus,
 } from "./status";
 
@@ -15,7 +17,7 @@ const widgetId = "village" as WidgetId;
 const otherId = "alerts" as WidgetId;
 const nodeId = "avatar:1" as NodeId;
 
-const zeroCounters: Readonly<Record<CounterName, number>> = {
+const zeroCounters: Readonly<Record<CounterName | ErrorCounterName, number>> = {
 	AssetNotFound: 0,
 	EffectCompileFailed: 0,
 	EffectNotFound: 0,
@@ -26,6 +28,14 @@ const zeroCounters: Readonly<Record<CounterName, number>> = {
 	heartbeat: 0,
 	dropped: 0,
 	skipped: 0,
+};
+
+const statusOf = (store: StatusStore, id: WidgetId): WidgetStatus => {
+	const status = store.get(id);
+	if (status === undefined) {
+		throw new Error(`no status for ${id}`);
+	}
+	return status;
 };
 
 describe("StatusStore", () => {
@@ -42,7 +52,7 @@ describe("StatusStore", () => {
 		});
 	});
 
-	it("notifies subscribers on every change", () => {
+	it("notifies subscribers on registration and state change", () => {
 		const store = createStatusStore({});
 		const seen: string[] = [];
 
@@ -76,7 +86,7 @@ describe("StatusStore", () => {
 			new UnknownNode({ widgetId, message: "Unknown node ghost", nodeId }),
 		);
 
-		const status = store.get(widgetId);
+		const status = statusOf(store, widgetId);
 		expect(status.counters.UnknownNode).toBe(1);
 		expect(status.lastError).toEqual({
 			tag: "UnknownNode",
@@ -102,7 +112,7 @@ describe("StatusStore", () => {
 			new RenderFailed({ widgetId, message: "pixi blew up" }),
 		);
 
-		const status = store.get(widgetId);
+		const status = statusOf(store, widgetId);
 		expect(status.counters.UnknownNode).toBe(2);
 		expect(status.counters.RenderFailed).toBe(1);
 		expect(status.lastError).toEqual({
@@ -120,10 +130,25 @@ describe("StatusStore", () => {
 		store.count(widgetId, "dropped", 5);
 		store.count(widgetId, "heartbeat", 3);
 
-		const { counters } = store.get(widgetId);
+		const { counters } = statusOf(store, widgetId);
 		expect(counters.skipped).toBe(1);
 		expect(counters.dropped).toBe(5);
 		expect(counters.heartbeat).toBe(3);
+	});
+
+	it("uses performance.now when no clock is injected", () => {
+		const store = createStatusStore({});
+
+		store.register(widgetId);
+		store.recordError(
+			widgetId,
+			new RenderFailed({ widgetId, message: "boom" }),
+		);
+
+		const at = statusOf(store, widgetId).lastError?.at;
+		expect(typeof at).toBe("number");
+		expect(Number.isFinite(at)).toBe(true);
+		expect(at).toBeGreaterThan(0);
 	});
 
 	it("reset zeroes counters and lastError and returns the widget to loading", () => {
@@ -147,6 +172,23 @@ describe("StatusStore", () => {
 		});
 	});
 
+	it("notifies at once on reset and drops the pending counters", () => {
+		const store = createStatusStore({});
+		const seen: WidgetStatus[] = [];
+
+		store.register(widgetId);
+		store.subscribe((status) => seen.push(status));
+		store.count(widgetId, "skipped");
+		store.reset(widgetId);
+
+		expect(seen).toHaveLength(1);
+		expect(seen[0]?.counters.skipped).toBe(0);
+
+		store.flush(widgetId);
+
+		expect(seen).toHaveLength(1);
+	});
+
 	it("keeps the status of one widget out of another", () => {
 		const store = createStatusStore({});
 
@@ -155,15 +197,16 @@ describe("StatusStore", () => {
 		store.count(widgetId, "skipped", 4);
 		store.setState(otherId, "active");
 
-		expect(store.get(widgetId).counters.skipped).toBe(4);
-		expect(store.get(otherId).counters.skipped).toBe(0);
-		expect(store.get(otherId).state).toBe("active");
+		expect(statusOf(store, widgetId).counters.skipped).toBe(4);
+		expect(statusOf(store, otherId).counters.skipped).toBe(0);
+		expect(statusOf(store, otherId).state).toBe("active");
 	});
 
-	it("throws on an unknown widget", () => {
+	it("returns undefined for an unknown widget", () => {
 		const store = createStatusStore({});
 
-		expect(() => store.get(widgetId)).toThrow(/village/);
+		expect(store.get(widgetId)).toBeUndefined();
+		expect(() => store.flush(widgetId)).not.toThrow();
 	});
 
 	it("rejects a duplicate registration", () => {
@@ -186,7 +229,7 @@ describe("StatusStore", () => {
 		});
 		store.remove(widgetId);
 
-		expect(() => store.get(widgetId)).toThrow(/village/);
+		expect(store.get(widgetId)).toBeUndefined();
 		expect(calls).toBe(0);
 	});
 
@@ -203,33 +246,43 @@ describe("StatusStore", () => {
 		expect(seen?.state).toBe("active");
 	});
 
-	it("notifies subscribers after the counter and the error are stored", () => {
+	it("batches counter changes until flush", () => {
 		const store = createStatusStore({ now: () => 1234 });
 		const seen: WidgetStatus[] = [];
 
 		store.register(widgetId);
 		store.subscribe((status) => seen.push(status));
+		store.count(widgetId, "skipped", 2);
 		store.recordError(
 			widgetId,
 			new RenderFailed({ widgetId, message: "boom", nodeId }),
 		);
 
+		expect(seen).toHaveLength(0);
+
+		store.flush(widgetId);
+
 		expect(seen).toHaveLength(1);
+		expect(seen[0]?.counters.skipped).toBe(2);
 		expect(seen[0]?.counters.RenderFailed).toBe(1);
 		expect(seen[0]?.lastError).toEqual({
 			tag: "RenderFailed",
 			message: "boom",
 			at: 1234,
 		});
+
+		store.flush(widgetId);
+
+		expect(seen).toHaveLength(1);
 	});
 
 	it("hands out a copy of the counters", () => {
 		const store = createStatusStore({});
 		store.register(widgetId);
 
-		const first = store.get(widgetId);
+		const first = statusOf(store, widgetId);
 		Object.assign(first.counters, { skipped: 5 });
 
-		expect(store.get(widgetId).counters.skipped).toBe(0);
+		expect(statusOf(store, widgetId).counters.skipped).toBe(0);
 	});
 });

@@ -16,6 +16,7 @@ export type { RenderTarget } from "./nodes/render-target";
 export { createPixiRenderTarget } from "./nodes/pixi-render-target";
 export type {
 	CounterName,
+	ErrorCounterName,
 	StatusStore,
 	WidgetErrorInfo,
 	WidgetState,

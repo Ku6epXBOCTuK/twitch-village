@@ -4,8 +4,8 @@ import type { RenderError } from "./errors";
 export type WidgetState =
 	"loading" | "active" | "paused" | "degraded" | "crashed";
 
-export type CounterName =
-	RenderError["_tag"] | "heartbeat" | "dropped" | "skipped";
+export type ErrorCounterName = RenderError["_tag"];
+export type CounterName = "heartbeat" | "dropped" | "skipped";
 
 export interface WidgetErrorInfo {
 	readonly tag: RenderError["_tag"];
@@ -16,13 +16,13 @@ export interface WidgetErrorInfo {
 export interface WidgetStatus {
 	readonly widgetId: WidgetId;
 	readonly state: WidgetState;
-	readonly counters: Readonly<Record<CounterName, number>>;
+	readonly counters: Readonly<Record<CounterName | ErrorCounterName, number>>;
 	readonly lastError: WidgetErrorInfo | null;
 }
 
 interface StatusRecord {
 	state: WidgetState;
-	counters: Record<CounterName, number>;
+	counters: Record<CounterName | ErrorCounterName, number>;
 	lastError: WidgetErrorInfo | null;
 }
 
@@ -32,16 +32,17 @@ export interface StatusStoreOptions {
 
 export interface StatusStore {
 	register(widgetId: WidgetId): void;
-	get(widgetId: WidgetId): WidgetStatus;
+	get(widgetId: WidgetId): WidgetStatus | undefined;
 	setState(widgetId: WidgetId, state: WidgetState): void;
 	count(widgetId: WidgetId, name: CounterName, by?: number): void;
 	recordError(widgetId: WidgetId, error: RenderError): void;
+	flush(widgetId: WidgetId): void;
 	subscribe(listener: (status: WidgetStatus) => void): () => void;
 	reset(widgetId: WidgetId): void;
 	remove(widgetId: WidgetId): void;
 }
 
-function emptyCounters(): Record<CounterName, number> {
+function emptyCounters(): Record<CounterName | ErrorCounterName, number> {
 	return {
 		AssetNotFound: 0,
 		InvalidCommand: 0,
@@ -64,9 +65,12 @@ function toStatus(widgetId: WidgetId, status: StatusRecord): WidgetStatus {
 	return { ...status, widgetId, counters: { ...status.counters } };
 }
 
+// NOTE: counters and errors are batched until flush, while registration and
+// state changes notify at once, so a crash reaches the panel immediately.
 export function createStatusStore(options: StatusStoreOptions): StatusStore {
-	const now = options.now ?? performance.now;
+	const now = options.now ?? (() => performance.now());
 	const statuses = new Map<WidgetId, StatusRecord>();
+	const dirty = new Set<WidgetId>();
 	const listeners = new Set<(status: WidgetStatus) => void>();
 
 	function mutableOf(widgetId: WidgetId): StatusRecord {
@@ -93,8 +97,8 @@ export function createStatusStore(options: StatusStoreOptions): StatusStore {
 			notifyListeners(widgetId, status);
 		},
 		get(widgetId) {
-			const status = mutableOf(widgetId);
-			return toStatus(widgetId, status);
+			const status = statuses.get(widgetId);
+			return status === undefined ? undefined : toStatus(widgetId, status);
 		},
 		setState(widgetId, state) {
 			const status = mutableOf(widgetId);
@@ -104,13 +108,20 @@ export function createStatusStore(options: StatusStoreOptions): StatusStore {
 		count(widgetId, name, by = 1) {
 			const status = mutableOf(widgetId);
 			status.counters[name] += by;
-			notifyListeners(widgetId, status);
+			dirty.add(widgetId);
 		},
 		recordError(widgetId, error) {
 			const status = mutableOf(widgetId);
 			status.counters[error._tag] += 1;
 			status.lastError = { tag: error._tag, message: error.message, at: now() };
-			notifyListeners(widgetId, status);
+			dirty.add(widgetId);
+		},
+		flush(widgetId) {
+			if (!dirty.delete(widgetId)) return;
+			const status = statuses.get(widgetId);
+			if (status !== undefined) {
+				notifyListeners(widgetId, status);
+			}
 		},
 		subscribe(listener) {
 			listeners.add(listener);
@@ -121,10 +132,12 @@ export function createStatusStore(options: StatusStoreOptions): StatusStore {
 		reset(widgetId) {
 			const status = mutableOf(widgetId);
 			Object.assign(status, emptyStatus());
+			dirty.delete(widgetId);
 			notifyListeners(widgetId, status);
 		},
 		remove(widgetId) {
 			statuses.delete(widgetId);
+			dirty.delete(widgetId);
 		},
 	};
 }
