@@ -30,7 +30,7 @@ export interface AssetRegistry {
 	isLoaded(bundleId: string): boolean;
 	// NOTE: resolution goes through the backend on every call; the registry
 	// keeps no texture map of its own.
-	getTexture(assetId: AssetId): Texture;
+	getTexture(assetId: AssetId): Texture | AssetNotFound;
 }
 
 export function createAssetRegistry(
@@ -42,8 +42,8 @@ export function createAssetRegistry(
 	const aliasToBundleMap = new Map<AssetId, string>();
 	const bundleLoaded = new Set<string>();
 
-	function toAssetNotFound(assetId: AssetId, message: string): never {
-		throw new AssetNotFound({
+	function assetNotFound(assetId: AssetId, message: string): AssetNotFound {
+		return new AssetNotFound({
 			widgetId: options.widgetId,
 			message,
 			assetId,
@@ -97,16 +97,22 @@ export function createAssetRegistry(
 			}
 		},
 		isLoaded: (bundleId: string) => bundleLoaded.has(bundleId),
-		getTexture: (assetId: AssetId): Texture => {
+		getTexture: (assetId: AssetId): Texture | AssetNotFound => {
 			if (!initialized) throw new Error("AssetRegistry is not initialized");
 			const bundleId = aliasToBundleMap.get(assetId);
 			if (bundleId === undefined)
-				toAssetNotFound(assetId, `Bundle for asset ${assetId} is not found`);
+				return assetNotFound(
+					assetId,
+					`Bundle for asset ${assetId} is not found`,
+				);
 			if (!bundleLoaded.has(bundleId))
-				toAssetNotFound(assetId, `Bundle for asset ${assetId} is not loaded`);
+				return assetNotFound(
+					assetId,
+					`Bundle for asset ${assetId} is not loaded`,
+				);
 			const texture = backend.get(assetId);
 			if (texture === undefined)
-				toAssetNotFound(assetId, `Asset ${assetId} is not found`);
+				return assetNotFound(assetId, `Asset ${assetId} is not found`);
 			return texture;
 		},
 	};

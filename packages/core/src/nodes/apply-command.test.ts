@@ -70,8 +70,9 @@ const createEffects = (): FilterSource & {
 			requested.push({ effectId, nodeId });
 			return { effectId, nodeId } as unknown as Filter;
 		},
-		setParam(effectId: EffectId, param: string, value: number): void {
+		setParam(effectId: EffectId, param: string, value: number) {
 			params.push({ effectId, param, value });
+			return null;
 		},
 	};
 };

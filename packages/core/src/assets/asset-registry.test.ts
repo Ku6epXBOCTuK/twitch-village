@@ -186,7 +186,7 @@ describe("AssetRegistry", () => {
 		backend.textures.set(avatar, stubTexture());
 		await registry.init(manifest);
 
-		expect(() => registry.getTexture(avatar)).toThrow(AssetNotFound);
+		expect(registry.getTexture(avatar)).toBeInstanceOf(AssetNotFound);
 	});
 
 	it("rejects an asset after its bundle was unloaded", async () => {
@@ -196,20 +196,18 @@ describe("AssetRegistry", () => {
 		await registry.loadBundle("village");
 		await registry.unloadBundle("village");
 
-		expect(() => registry.getTexture(avatar)).toThrow(AssetNotFound);
+		expect(registry.getTexture(avatar)).toBeInstanceOf(AssetNotFound);
 	});
 
 	it("reports the widget and the asset of a miss", async () => {
 		const { registry } = setup();
 		await registry.init(manifest);
 
-		expect(() => registry.getTexture(avatar)).toThrow(
-			expect.objectContaining({
-				_tag: "AssetNotFound",
-				widgetId: village,
-				assetId: avatar,
-			}),
-		);
+		expect(registry.getTexture(avatar)).toMatchObject({
+			_tag: "AssetNotFound",
+			widgetId: village,
+			assetId: avatar,
+		});
 	});
 
 	it("rejects an asset missing from the manifest", async () => {
@@ -218,7 +216,7 @@ describe("AssetRegistry", () => {
 		backend.textures.set(unknown, stubTexture());
 		await registry.init(manifest);
 
-		expect(() => registry.getTexture(unknown)).toThrow(AssetNotFound);
+		expect(registry.getTexture(unknown)).toBeInstanceOf(AssetNotFound);
 	});
 
 	it("rejects an asset that the backend does not know", async () => {
@@ -226,6 +224,6 @@ describe("AssetRegistry", () => {
 		await registry.init(manifest);
 		await registry.loadBundle("village");
 
-		expect(() => registry.getTexture(avatar)).toThrow(AssetNotFound);
+		expect(registry.getTexture(avatar)).toBeInstanceOf(AssetNotFound);
 	});
 });

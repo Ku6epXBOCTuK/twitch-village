@@ -61,12 +61,16 @@ function toRenderFailed(
 }
 
 export interface TextureSource {
-	getTexture(assetId: AssetId): Texture;
+	getTexture(assetId: AssetId): Texture | AssetNotFound;
 }
 
 export interface FilterSource {
-	get(effectId: EffectId, nodeId: NodeId): Filter;
-	setParam(effectId: EffectId, param: string, value: number): void;
+	get(effectId: EffectId, nodeId: NodeId): Filter | RenderError;
+	setParam(
+		effectId: EffectId,
+		param: string,
+		value: number,
+	): RenderError | null;
 }
 
 export interface ApplyCommandContext {
@@ -98,14 +102,11 @@ const applyLeaf = Effect.fnUntraced(function* (
 	ctx: ApplyCommandContext,
 	command: LeafCommand,
 ): Effect.fn.Return<void, RenderError> {
-	function attemptPort<A>(run: () => A): Effect.Effect<A, RenderError> {
-		return Effect.matchEffect(
-			Effect.try({ try: run, catch: (error) => error }),
-			{
-				onFailure: (error) =>
-					isRenderError(error) ? Effect.fail(error) : Effect.die(error),
-				onSuccess: (value) => Effect.succeed(value),
-			},
+	function fromPort<A>(
+		run: () => A | RenderError,
+	): Effect.Effect<A, RenderError> {
+		return Effect.flatMap(Effect.sync(run), (value) =>
+			isRenderError(value) ? Effect.fail(value) : Effect.succeed(value),
 		);
 	}
 
@@ -154,14 +155,14 @@ const applyLeaf = Effect.fnUntraced(function* (
 			attemptForeign(() => ctx.target.setTransform(nodeId, rest)),
 		SetSprite: ({ nodeId, assetId }) =>
 			Effect.flatMap(
-				attemptPort(() => ctx.textures.getTexture(assetId)),
+				fromPort(() => ctx.textures.getTexture(assetId)),
 				(texture) =>
 					attemptForeign(() => ctx.target.setSprite(nodeId, texture)),
 			),
 		SetAnimation: ({ nodeId, assetIds, fps, loop }) =>
 			Effect.flatMap(
 				Effect.forEach(assetIds, (assetId) =>
-					attemptPort(() => ctx.textures.getTexture(assetId)),
+					fromPort(() => ctx.textures.getTexture(assetId)),
 				),
 				(textures) =>
 					attemptForeign(() =>
@@ -172,7 +173,7 @@ const applyLeaf = Effect.fnUntraced(function* (
 			attemptForeign(() => ctx.target.setText(nodeId, text, style)),
 		AddFilter: ({ nodeId, effectId }) =>
 			Effect.flatMap(
-				attemptPort(() => ctx.effects.get(effectId, nodeId)),
+				fromPort(() => ctx.effects.get(effectId, nodeId)),
 				(filter) =>
 					attemptForeign(() => ctx.target.addFilter(nodeId, effectId, filter)),
 			),
@@ -180,7 +181,7 @@ const applyLeaf = Effect.fnUntraced(function* (
 			attemptForeign(() => ctx.target.removeFilter(nodeId, effectId)),
 		SetFilterParam: ({ nodeId, effectId, param, value }) =>
 			Effect.flatMap(
-				attemptPort(() => ctx.effects.setParam(effectId, param, value)),
+				fromPort(() => ctx.effects.setParam(effectId, param, value)),
 				() =>
 					attemptForeign(() =>
 						ctx.target.setFilterParam(nodeId, effectId, param, value),

@@ -73,13 +73,11 @@ describe("EffectRegistry", () => {
 	it("rejects an effect that was never registered", () => {
 		const { registry } = withGlow();
 
-		expect(() => registry.get(asEffectId("blur"), asNodeId("node-1"))).toThrow(
-			expect.objectContaining({
-				_tag: "EffectNotFound",
-				widgetId: village,
-				effectId: "blur",
-			}),
-		);
+		expect(registry.get(asEffectId("blur"), asNodeId("node-1"))).toMatchObject({
+			_tag: "EffectNotFound",
+			widgetId: village,
+			effectId: "blur",
+		});
 	});
 
 	it("compiles once per node and reuses the instance", () => {
@@ -106,7 +104,7 @@ describe("EffectRegistry", () => {
 		const { registry, compiler } = withGlow();
 		compiler.failures.set(glow, new Error("shader rejected"));
 
-		expect(() => registry.get(glow, asNodeId("node-1"))).toThrow(
+		expect(registry.get(glow, asNodeId("node-1"))).toBeInstanceOf(
 			EffectCompileFailed,
 		);
 	});
@@ -115,10 +113,10 @@ describe("EffectRegistry", () => {
 		const { registry, compiler } = withGlow();
 		compiler.failures.set(glow, new Error("shader rejected"));
 
-		expect(() => registry.get(glow, asNodeId("node-1"))).toThrow(
+		expect(registry.get(glow, asNodeId("node-1"))).toBeInstanceOf(
 			EffectCompileFailed,
 		);
-		expect(() => registry.get(glow, asNodeId("node-2"))).toThrow(
+		expect(registry.get(glow, asNodeId("node-2"))).toBeInstanceOf(
 			EffectCompileFailed,
 		);
 
@@ -129,7 +127,7 @@ describe("EffectRegistry", () => {
 		const { registry, compiler } = withGlow();
 		compiler.failures.set(glow, new Error("shader rejected"));
 
-		expect(() => registry.get(glow, asNodeId("node-1"))).toThrow(
+		expect(registry.get(glow, asNodeId("node-1"))).toBeInstanceOf(
 			EffectCompileFailed,
 		);
 		expect(registry.get(outline, asNodeId("node-1"))).toBeDefined();
@@ -157,19 +155,17 @@ describe("EffectRegistry", () => {
 	it("rejects a param below the lower bound", () => {
 		const { registry } = withGlow();
 
-		expect(() => registry.setParam(glow, "uIntensity", -0.1)).toThrow(
-			expect.objectContaining({
-				_tag: "InvalidEffectParam",
-				effectId: glow,
-				param: "uIntensity",
-			}),
-		);
+		expect(registry.setParam(glow, "uIntensity", -0.1)).toMatchObject({
+			_tag: "InvalidEffectParam",
+			effectId: glow,
+			param: "uIntensity",
+		});
 	});
 
 	it("rejects a param above the upper bound", () => {
 		const { registry } = withGlow();
 
-		expect(() => registry.setParam(glow, "uIntensity", 2)).toThrow(
+		expect(registry.setParam(glow, "uIntensity", 2)).toBeInstanceOf(
 			InvalidEffectParam,
 		);
 	});
@@ -177,7 +173,7 @@ describe("EffectRegistry", () => {
 	it("rejects a param that the effect does not declare", () => {
 		const { registry } = withGlow();
 
-		expect(() => registry.setParam(glow, "uSpeed", 1)).toThrow(
+		expect(registry.setParam(glow, "uSpeed", 1)).toBeInstanceOf(
 			InvalidEffectParam,
 		);
 	});
@@ -185,7 +181,7 @@ describe("EffectRegistry", () => {
 	it("rejects a param of an unknown effect", () => {
 		const { registry } = withGlow();
 
-		expect(() => registry.setParam(asEffectId("blur"), "uSmooth", 1)).toThrow(
+		expect(registry.setParam(asEffectId("blur"), "uSmooth", 1)).toBeInstanceOf(
 			EffectNotFound,
 		);
 	});
@@ -193,7 +189,7 @@ describe("EffectRegistry", () => {
 	it("clears instances and broken state", () => {
 		const { registry, compiler } = withGlow();
 		compiler.failures.set(glow, new Error("shader rejected"));
-		expect(() => registry.get(glow, asNodeId("node-1"))).toThrow(
+		expect(registry.get(glow, asNodeId("node-1"))).toBeInstanceOf(
 			EffectCompileFailed,
 		);
 
