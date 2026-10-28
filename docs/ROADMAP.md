@@ -1,73 +1,59 @@
 # Roadmap: twitch-village
 
-**Статус:** в работе (фазы 0-1 закрыты, фаза 2 частично) **Дата:** 2026-10-21
-**Обновлено:** 2026-10-23 **Связанный документ:** `docs/ARCHITECTURE.md`
+**Статус:** в работе: фазы 0-1 закрыты, в фазе 2 закрыты шаги 17-23, следующий —
+шаг 24. **Обновлено:** 2026-10-28. **Связанный документ:**
+`docs/ARCHITECTURE.md`.
 
-Пошаговый план реализации v1 «деревня зрителей». Каждый шаг — самостоятельная
-единица работы: файлы, команды, критерий готовности. Шаги выполняются строго по
-порядку внутри фазы; фазы заканчиваются чекпоинтом. Номера шагов сохраняются: на
-них ссылаются архитектура и история задач.
+Направление, а не истина: если по коду задача решается иначе, делается
+правильное решение, а шаг переписывается под него. Номера шагов не меняются — на
+них ссылаются архитектура и история задач. Выполненный шаг описан итогом и
+решениями; инструкции и код из него удаляются, код — источник правды.
 
-Соглашения:
-
-- Пакеты: `@tv/protocol`, `@tv/core`, `@tv/widget-village`, `@tv/event-mock`,
-  `@tv/config`, приложение `@tv/overlay`.
-- `pnpm` — единственный пакетный менеджер, `pnpm -F <pkg> <cmd>` для адресных
-  команд.
-- Выполненные шаги описаны итогом, а не инструкцией: инструкция больше не нужна,
-  код — источник правды.
+Соглашения: `pnpm` — единственный пакетный менеджер (`pnpm -F <pkg> <cmd>`),
+пакеты `@tv/protocol`, `@tv/core`, `@tv/widget-village`, `@tv/event-mock`,
+`@tv/config`, приложение `@tv/overlay`.
 
 ---
 
 ## Фаза 0. Каркас монорепо
 
-**Статус: выполнено (шаги 1-8).** Что получилось:
+**Статус: выполнено (шаги 1-8).** pnpm-workspace + Turborepo 2.11, корневые
+скрипты `build`/`dev`/`typecheck`/`test`/`lint`/`assets`/`format`. У пакетов
+`main`/`types` указывают на `src/index.ts`; `@tv/config` — только
+`tsconfig.base.json`. Версии зафиксированы: pixi.js 8.22, effect 4.0, vite 8.3,
+typescript 5.9, vitest 5.0, eslint 10.13, @assetpack/core 1.7. Линт границ
+(flat-конфиг) запрещает `pixi.js` и `@tv/core` в виджете, глобалы
+`window`/`document` в воркере, `@tv/widget-*` в Core и держит зоны Effect
+(`ARCHITECTURE.md` §11.1).
 
-- pnpm-workspace (`apps/*`, `packages/*`), Turborepo 2.11, корневые скрипты
-  `build`, `dev`, `typecheck`, `test`, `test:watch`, `lint`, `assets`, `format`.
-- Пакеты созданы, `main`/`types` указывают на `src/index.ts`; `@tv/config` — это
-  только `tsconfig.base.json`, который наследуют все пакеты.
-- Зафиксированы версии: pixi.js 8.22, effect 4.0, vite 8.3, typescript 5.9,
-  vitest 5.0, eslint 10.13, turbo 2.11, @assetpack/core 1.7.
-- Линт границ настроен flat-конфигом: запреты на `pixi.js` и `@tv/core` в
-  виджете, на глобалы `window`/`document` в воркере, на `@tv/widget-*` в Core
-  (позже дополнено зонами Effect, см. ниже).
+Факты, которые нужно помнить:
 
-Отклонения от первоначального плана, которые нужно помнить:
-
-- **TypeScript 5.9, не 7.x**: `typescript-eslint` 8.x не поддерживает TS 7.
-- **Project references не используются**: `noEmit` несовместим с `composite`.
-  Каждый пакет проверяется через `tsc --noEmit -p tsconfig.json`, типы между
-  пакетами идут через `package.json` и symlink pnpm.
-- **Настройки pnpm живут в `pnpm-workspace.yaml`**: поле `pnpm` в `package.json`
-  pnpm 12 игнорирует. Там же `allowBuilds: { sharp: true, cpu-features: false }`
-  (`cpu-features` не собирается на Windows + Python 3).
-- `test` запускается с `--passWithNoTests`, чтобы пустые пакеты не валили
-  корневой прогон.
-- `pnpm assets` падает до появления `.assetpack.js` в фазе 4 — это ожидаемо.
-- **Зоны Effect в линтере (дополнено 2026-10-23).** Корневой `eslint.config.js`
-  использует `@typescript-eslint/no-restricted-imports` и держит зоны из
-  `ARCHITECTURE.md` §11.1: `Layer`/`ManagedRuntime` — только в
-  `core/src/live.ts`, `runSync` — только в `core/src/effect-adapter.ts`,
-  Pixi-слой и пакеты `protocol`/`widget-village`/`event-mock` не видят рантайм
-  Effect.
+- TypeScript 5.9, не 7.x: `typescript-eslint` 8.x не поддерживает TS 7.
+- Project references не используются: `noEmit` несовместим с `composite`. Типы
+  между пакетами идут через `package.json` и symlink pnpm.
+- Настройки pnpm — в `pnpm-workspace.yaml` (поле `pnpm` в `package.json` pnpm 12
+  игнорирует). Там же `allowBuilds: { sharp: true, cpu-features: false }`:
+  `cpu-features` не собирается на Windows + Python 3.
+- `test` идёт с `--passWithNoTests`, чтобы пустые пакеты не валили корневой
+  прогон. `pnpm assets` падает до появления `.assetpack.js` в фазе 4.
 
 ---
 
 ## Фаза 1. Протокол
 
-**Статус: выполнено (шаги 9-16).** `@tv/protocol` содержит:
+**Статус: выполнено (шаги 9-16).** `@tv/protocol` — единственный источник правды
+по контракту:
 
-- `version.ts` — `PROTOCOL_VERSION`, `isCompatible` по мажорной версии;
+- `version.ts` — `PROTOCOL_VERSION` и `isCompatible` по мажорной версии;
 - `ids.ts` — брендированные `NodeId`, `AssetId`, `EffectId`, `ViewerId`,
-  `WidgetId` (до 128 символов, `[A-Za-z0-9:_-]`); исключение — `AssetId`: это
-  путь внутри бандла (`avatar/cat/0`), поэтому ему разрешён `/`;
+  `WidgetId` (до 128 символов, `[A-Za-z0-9:_-]`); `AssetId` — исключение: это
+  путь внутри бандла (`avatar/cat/0`), ему разрешён `/`;
 - `commands.ts` — все `RenderCommand`, листовой `Batch` (≤ 2048), лимиты в
   схемах (`alpha` 0..1, `fps` 1..60);
-- `events.ts` — `WidgetEvent`, `ViewerEvent` и конверты `CoreToWidget` /
+- `events.ts` — `WidgetEvent`, `ViewerEvent`, конверты `CoreToWidget` /
   `WidgetToCore` с `protocolVersion`;
 - `errors.ts` — 11 `Data.TaggedError` из раздела 6 архитектуры;
-- `transport.ts` — `Transport<Outgoing, Incoming>`, `createDirectTransportPair`
+- `transport.ts` — `Transport<Outgoing, Incoming>` и `createDirectTransportPair`
   для тестов.
 
 Тесты покрывают round-trip через `structuredClone`, невалидные примеры (лишние
@@ -78,171 +64,50 @@
 
 ## Фаза 2. Render Core
 
-**Статус: в работе.**
+**Статус: в работе. Закрыты шаги 17-23.**
 
-### Шаги 17-18 (выполнено)
+### Закрытые шаги 17-23: решения
 
-- `createPixiApp(options)` и `buildPixiOptions(options)` — plain-фабрика
-  `PIXI.Application` с `resizeTo` и `devicePixelRatio`; настроек `deps` больше
-  нет, инъекция переехала в граф.
+- `RenderTarget` скрывает Pixi; `RenderState` держит снимок дерева и общий для
+  обеих реализаций. `createPixiRenderTarget` и `createFakeRenderTarget` проходят
+  один контракт `render-target.contract.ts` без GPU.
 - `live.ts` — композиционный корень: сервисы `CoreApp`, `Clock`,
-  `RenderTargets`, слои `coreAppLayer`/`clockLayer`/`renderTargetsLayer`,
-  `coreLive(options)` и `createCoreRuntime(options)` на `ManagedRuntime`.
-- `RenderTarget` — интерфейс, за которым скрыт Pixi; `RenderState` хранит снимок
-  дерева и общий для обеих реализаций.
-- `createPixiRenderTarget` и `createFakeRenderTarget` проходят общий
-  `render-target.contract.ts` (дерево, трансформации, спрайты, анимации, текст,
-  фильтры, удаление с детьми, неизвестный узел) без GPU.
-- Тесты `live.test.ts` собирают граф с `Layer.succeed(CoreApp, fake)` вместо
-  ручного `deps`-объекта.
+  `RenderTargets`, слои и `ManagedRuntime`. DI только через `Layer`,
+  `deps`-объектов нет.
+- `NodeRegistry` — единственный владелец Pixi-объектов виджета: ключ — префикс
+  экземпляра плюс `NodeId`, родитель по умолчанию — корневой контейнер, `remove`
+  удаляет поддерево.
+- `applyCommand` — явный `Match` по всем вариантам, `RenderCommand` превращается
+  в операции реестра и таргета, любой `throw` становится `RenderError`.
+  Неизвестный узел и неизвестный родитель — `UnknownNode`, дубликат `CreateNode`
+  — `InvalidCommand`.
+- `applyCommand` не падает: возвращает `ApplyCommandResult { errors, skipped }`,
+  пачка продолжается после сбоя, 16 ошибок — потолок на пачку (`ARCHITECTURE.md`
+  §4.2, §6.1). Раньше пачка обрывалась на первой ошибке.
+- `CommandBus` — FIFO на виджет, `maxQueueLength`/`maxCommandsPerFrame`/
+  `maxDrainMs`, бюджет проверяется после каждой команды. Переполнение роняет
+  очередь и отдаёт `QueueOverflow` через `onOverflow`; решение «виджет
+  деградирует» принимает вызывающий.
+- `AssetRegistry`: Pixi за портом `AssetBackend`, манифест разбирается в карту
+  `assetId → bundleId`, текстуры реестр не держит, `loadBundle`/`unloadBundle`
+  на активации и деактивации, промах — `AssetNotFound`.
+- `EffectRegistry`: `register` ничего не компилирует, `get` компилирует лениво и
+  кэширует по `(effectId, nodeId)`, сломанным считается эффект целиком до
+  `clear()`, `setParam` проверяет имя параметра и границы. Ошибки манифеста —
+  обычный `Error`: это ошибка разработчика, а не событие виджета.
 
-Следствие для DI: `Layer` как композиционный корень, зоны проверяются линтером —
-`docs/ARCHITECTURE.md` §11.1.
-
-### Шаг 19. NodeRegistry
-
-Файл: `packages/core/src/nodes/node-registry.ts`.
-
-- `Map<NodeId, { handle, kind, parentId, filters }>` с префиксом экземпляра
-  виджета.
-- Операции: `create`, `get`, `remove`, `removeAll`, `list`.
-- Ошибки: `UnknownNode`, дубликат `CreateNode`.
-- Родитель по умолчанию — корневой контейнер виджета.
-
-Готово: юнит-тесты на дубликат, неизвестный `nodeId`, `removeAll` чистит всё.
-
-### Шаг 20. Применение команд
-
-Файл: `packages/core/src/nodes/apply-command.ts`.
-
-`applyCommand(ctx, command: RenderCommand): Effect<void, RenderError>`:
-
-- маппинг `RenderCommand` → операции `RenderTarget`/`NodeRegistry`;
-- каждый вариант обработан явно, `match` без `default`;
-- `Batch` — итерация по leaf-командам: схема `protocol` запрещает вложенность,
-  лимит 2048;
-- `SetParent` переставляет узел в дереве;
-- `AddFilter` берёт `Filter` из `EffectRegistry` (шаг 23);
-- любое исключение Pixi ловится и превращается в `RenderFailed`.
-
-Готово: таблица тестов «команда → вызовы рендер-таргета» на фейке, 1 тест на
-вариант.
-
-### Шаг 21. CommandBus
-
-Файл: `packages/core/src/queue/command-bus.ts`.
-
-```ts
-createCommandBus(config: {
-  maxQueueLength: number;      // 4096
-  maxCommandsPerFrame: number; // 512
-  maxDrainMs: number;          // 4
-}): {
-  push(widgetId: WidgetId, commands: RenderCommand[]): void;
-  drain(widgetId: WidgetId, now: number): RenderCommand[];
-  stats(widgetId: WidgetId): { queued: number; dropped: number; processed: number };
-  clear(widgetId: WidgetId): void;
-};
-```
-
-- Переполнение → `QueueOverflow`, очередь сбрасывается.
-- `drain` уважает лимиты команд и миллисекунд.
-
-Готово: тесты на лимит команд, лимит времени (мок `now`), переполнение,
-счётчики.
-
-### Шаг 22. AssetRegistry
-
-Файлы: `packages/core/src/assets/asset-registry.ts`, `manifest.ts`.
-
-- `init(globalManifest)` → разбор манифеста схемой и `Assets.init`; из манифеста
-  строится карта `assetId → bundleId`, потому что `getTexture` обязан знать,
-  загружен ли бандл этого ассета.
-- `loadBundle(bundleId)`, `unloadBundle(bundleId)`, `isLoaded(bundleId)`;
-  загруженные бандлы — множество id, текстуры реестр не держит.
-- `getTexture(assetId)`: нет в манифесте, бандл не загружен или бэкенд не отдал
-  текстуру → `AssetNotFound`.
-- `assetId` = путь внутри бандла, как в манифесте PixiJS v8. Алиасы считаются
-  уникальными между бандлами: пространство алиасов в Pixi глобальное, поэтому
-  дубликат — ошибка автора манифеста, а не повод для логики в реестре (побеждает
-  последний). Строгая проверка на дубликаты — отдельный шаг.
-- Признак «манифест уже инициализирован» — флаг самого реестра, выставляемый до
-  `await` (иначе два параллельных `init` вызовут `Assets.init` дважды), а не
-  запрос к `Assets`.
-- Pixi инжектируется портом `AssetBackend` (как `TextureSource` в
-  `apply-command.ts`), поэтому реестр тестируется без GPU; сам реестр —
-  plain-объект с `Promise` и броском `Data.TaggedError`, как `NodeRegistry`.
-  Отказ загрузки пробрасывается исходной ошибкой: подходящего типа в каталоге §6
-  архитектуры нет, решение — на шаге 26.
-
-Готово: тесты на двойную загрузку (идемпотентна), отказ загрузки (бандл остаётся
-снятым, повтор проходит), выгрузку незагруженного бандла (no-op), промах по ID
-на каждом из трёх условий (с фейковым бэкендом).
-
-### Шаг 23. EffectRegistry (выполнено)
-
-Файлы: `packages/core/src/effects/effect-manifest.ts`,
-`packages/core/src/effects/effect-registry.ts`; фейк компилятора —
-`packages/core/src/testing/fake-effect-compiler.ts`.
-
-Схема манифеста:
-`{ effects: [{ effectId, vertex, fragment, params: [{ name, min, max, default }] }] }`.
-Проверка схемы — на границе загрузки (шаг 26), а `register` проверяет смысл:
-дубликат `effectId`, `default` вне `[min, max]`, перевёрнутые границы. Это
-`Error` конфигурации, а не `RenderError`: манифест собирается на сборке, битый
-манифест — ошибка разработчика, а не событие виджета.
-
-```ts
-interface EffectCompiler {
-  compile(definition: EffectDefinition): Filter;
-}
-interface EffectRegistry extends FilterSource {
-  register(manifest: EffectManifest): void;
-  get(effectId: EffectId, nodeId: NodeId): Filter;
-  setParam(effectId: EffectId, param: string, value: number): void;
-  isBroken(effectId: EffectId): boolean;
-  clear(): void;
-}
-```
-
-- `register` ничего не компилирует; `get` компилирует при первом обращении и
-  кэширует экземпляр по `(effectId, nodeId)`, поэтому два узла не делят один
-  `Filter`. Ключ — брендированный `NodeId`, без разжалования до `string`: реестр
-  живёт на виджет, `clear()` при деактивации, префикс экземпляра в ключе не
-  нужен.
-- Ошибка компиляции → `EffectCompileFailed`; сломанным считается эффект целиком,
-  а не узел, повторных компиляций нет до `clear()`.
-- `setParam` только валидирует: неизвестный `effectId` → `EffectNotFound`,
-  неизвестный параметр или значение вне границ → `InvalidEffectParam`. Установка
-  uniform'а остаётся в `RenderTarget`.
-- Параметры `vec3` и авто-параметры (`uTime`) в v1 отсутствуют:
-  `SetFilterParam.value` в протоколе — `Schema.Number`. Расширение до
-  `Number | Array(Number)` вместе с `uColor` — на шаге 41, с инкрементом
-  `PROTOCOL_VERSION`.
-- Деактивация виджета — `clear()`: экземпляры и пометки о сломанном
-  сбрасываются.
-
-`apply-command` обязан звать `ctx.effects.setParam(...)` перед
-`target.setFilterParam(...)`, иначе границы не проверяются.
-
-Готово: тесты на ленивую компиляцию, кэш по узлу, отсутствие повторов после
-`EffectCompileFailed`, границы параметров и конфигурационные ошибки манифеста.
+Открытая находка: у `AssetRegistry` нет типа ошибки для отказа загрузки бандла,
+а `getTexture` бросает при ещё не загруженном бандле (TV-30).
 
 ### Шаг 24. Статус и счётчики
 
 Файл: `packages/core/src/status.ts`.
 
-```ts
-type WidgetState = "loading" | "active" | "paused" | "degraded" | "crashed";
-interface WidgetStatus {
-  widgetId: WidgetId;
-  state: WidgetState;
-  counters: Record<RenderErrorTag | "heartbeat", number>;
-  lastError?: { tag: string; message: string; at: number };
-}
-```
-
-`StatusStore` — подписка на изменения (для debug-панели).
+`WidgetStatus`: `widgetId`, `state` (`loading` | `active` | `paused` |
+`degraded` | `crashed`), `counters` по тегам `RenderError` плюс `heartbeat`,
+`dropped` (переполнение очереди) и `skipped` (потолок ошибок в пачке),
+`lastError`. `StatusStore` — подписка на изменения для debug-панели. Счётчики
+наполняют кадр (из `ApplyCommandResult`), очередь и watchdog.
 
 Готово: тест на инкремент и на уведомление подписчика.
 
@@ -250,38 +115,24 @@ interface WidgetStatus {
 
 Файл: `packages/core/src/widget/worker-transport.ts`.
 
-- Обёртка над `Worker` + `Transport`, установка `onmessage`/`onerror`.
-- `worker.onerror` и `messageerror` → колбэк `onFailure(WidgetCrashed)`.
-- Версионирование: первое сообщение от воркера обязано быть `Ready` с
-  `protocolVersion`; несовпадение → `ProtocolMismatch`, воркер терминируется.
+- Обёртка над `Worker` + `Transport`, `onmessage`/`onerror`.
+- `worker.onerror` и `messageerror` → `onFailure(WidgetCrashed)`.
+- Первое сообщение от воркера обязано быть `Ready` с `protocolVersion`;
+  несовпадение → `ProtocolMismatch`, воркер терминируется.
 
-Готово: тест с фейковым `Worker` (объект с `postMessage`/`terminate`).
+Готово: тест с фейковым `Worker`.
 
 ### Шаг 26. WidgetHost
 
 Файл: `packages/core/src/widget/widget-host.ts`.
 
-Собирает всё вместе:
-
-```js
-createWidgetHost(descriptor) → Effect<{
-  start(): Effect<void, WidgetError>;
-  stop(): Effect<void, never>;
-  onCoreEvent(event: WidgetEvent): void;
-  status(): WidgetStatus;
-}, never, CoreServices>
-```
-
-Зависимости (`RenderTargets`, `Clock`, позже `Assets`) хост берёт из `Context`,
-а не из `deps`-объекта: сборка идёт в `Effect.gen`, поэтому незакрытая
-зависимость — ошибка типов. `start`/`stop` остаются `Effect` со `Scope` и
-таймаутом (см. `ARCHITECTURE.md` §11.1).
-
 - `start`: загрузка бандла → регистрация эффектов → создание воркера → ожидание
   `Ready` с таймаутом 5 с → `active`.
 - `stop`: `Dispose` → `terminate()` → `unloadBundle` → удаление всех узлов.
 - Подписка на сообщения: валидация → очередь → счётчики.
-- `onCoreEvent` — отправка событий зрителей/вьюпорта в воркер.
+- `onCoreEvent` — отправка событий зрителей и вьюпорта в воркер.
+- Зависимости берутся из `Context` внутри `Effect.gen`; `start`/`stop` —
+  `Effect` со `Scope` и таймаутом (`ARCHITECTURE.md` §11.1).
 
 Готово: тест на полный цикл на фейковом воркере и `DirectTransport`.
 
@@ -289,7 +140,7 @@ createWidgetHost(descriptor) → Effect<{
 
 Файл: `packages/core/src/widget/watchdog.ts`.
 
-- Ожидание `Heartbeat` каждые `intervalMs` (500), таймаут `timeoutMs` (2000).
+- `Heartbeat` каждые `intervalMs` (500), таймаут `timeoutMs` (2000).
 - `check(now)` вызывается из тикера; просрочка → `WidgetTimeout`.
 - Флаг «на паузе» отключает таймаут.
 
@@ -301,53 +152,37 @@ createWidgetHost(descriptor) → Effect<{
 Файл: `packages/core/src/scene/scene-manager.ts`.
 
 - `activate(descriptor)`, `deactivate(widgetId)`, `status()`, `list()`.
-- Держит корневой контейнер на виджет (`stage.addChild`), `zIndex` по порядку
-  активации.
-- Идемпотентность: повторная активация без `restart` — no-op.
-- Публичный API Core — `packages/core/src/index.ts`:
-
-```ts
-createRenderCore(deps: {
-  app: Application;
-  createRenderTarget(widgetId: WidgetId): RenderTarget;
-  now?: () => number;
-}) → {
-  scene: SceneManager;
-  status: StatusStore;
-  dispose(): Promise<void>;
-}
-```
-
-Зависимости приходят из графа `live.ts` (`CoreApp`, `Clock`, `RenderTargets`),
-`createRenderCore` их только принимает и остаётся plain-объектом. Сам
-`SceneManager` живёт в `Effect`: `activate`/`deactivate` возвращают
-`Effect<void, WidgetError>`, приложение выполняет их через `ManagedRuntime`
-(`ARCHITECTURE.md` §11.1).
+- Корневой контейнер на виджет (`stage.addChild`), `zIndex` по порядку
+  активации; повторная активация без `restart` — no-op.
+- Публичный API Core (`packages/core/src/index.ts`) — `createRenderCore`,
+  который принимает `CoreServices` из `live.ts` и остаётся plain-объектом;
+  `activate`/`deactivate` возвращают `Effect<void, WidgetError>` и выполняются
+  приложением через `ManagedRuntime`.
 
 Готово: тест «активировать два виджета → два контейнера, деактивировать один →
 один контейнер, бандл выгружен».
 
 ### Шаг 29. Дренаж в тикере
 
-Файл: `packages/core/src/loop/ticker.ts`, мост —
+Файлы: `packages/core/src/loop/ticker.ts`, мост —
 `packages/core/src/effect-adapter.ts`.
 
-- `app.ticker.add(() => adapter.frame())`, где `adapter` — единственное место с
-  `runSync`: собирает `bus.drain()` по виджетам, применение команд и
-  `watchdog.check()` в одну Effect-программу на кадр.
-- Всё в `try/catch`: исключение → `RenderFailed` в статус, кадр продолжается.
-- Пустой кадр не должен создавать мусор (никаких аллокаций массивов при пустых
-  очередях).
-- Линт запрещает `runSync` вне `effect-adapter.ts`, поэтому второй мост не
-  появится молча.
+- `app.ticker.add(() => adapter.frame())`; `adapter` — единственное место с
+  `runSync` (линт это держит).
+- Кадр: `bus.drain()` по виджетам → `applyCommand` → `watchdog.check()` в одну
+  Effect-программу.
+- Результат `applyCommand` (`errors`, `skipped`) уходит в счётчики статуса;
+  ошибки не отменяют ни кадр, ни остальные виджеты, поэтому кадр обрабатывает
+  значения, а не ловит исключения.
+- Пустой кадр не аллоцирует.
 
 Готово: тест «исключение в applyCommand не ломает обработку следующего виджета».
 
 ### Шаг 30. Contract-тест рендер-цели и чекпоинт
 
-Файлы: `packages/core/src/nodes/__tests__/render-target.contract.ts`,
-`apply-command.test.ts`, `command-bus.test.ts`, `node-registry.test.ts`,
-`effect-registry.test.ts`, `widget-host.test.ts`.
+Файлы: `packages/core/src/nodes/render-target.contract.ts` и тесты
+`apply-command`, `command-bus`, `node-registry`, `effect-registry`,
+`widget-host`.
 
 Готово: `pnpm -F @tv/core test` зелёный; ни один тест не требует GPU.
 
@@ -400,9 +235,10 @@ createRenderCore(deps: {
 - Новый зритель → `CreateNode` × 3 (контейнер/спрайт/текст) + `SetParent` +
   `SetSprite`/`SetText` + `SetTransform`.
 - Изменение позиции → `SetTransform`; смена состояния → `SetAnimation`/`alpha`.
-- Удаление → `RemoveNode` для контейнера (дети удаляются вместе с поддеревом,
-  это уже поведение `NodeRegistry`, шаг 19).
-- Всё упаковывается в `Batch`.
+- Удаление → `RemoveNode` для контейнера: поддерево уносит `NodeRegistry`.
+- Всё упаковывается в один `Batch` на тик. Команды внутри независимы и не
+  опираются на побочный эффект соседних (`ARCHITECTURE.md` §4.2): пачка
+  продолжается после сбоя одной команды.
 
 Готово: тест «нет изменений → нет команд», «сдвиг на 5 px → одна
 `SetTransform`», «спавн → ровно 7 команд».
@@ -412,17 +248,11 @@ createRenderCore(deps: {
 Файлы: `packages/widget-village/src/widget.ts`,
 `packages/widget-village/src/worker.ts`.
 
-```ts
-export const villageWidget: WidgetDefinition = {
-  id: "village",
-  assetBundle: "village",
-  create(transport, ctx) { ... },
-};
-```
-
-`worker.ts` — единственная точка входа воркера: `self.onmessage` ↔ `Transport`,
-тик через `setInterval` 100 мс, `Heartbeat` каждые 500 мс, `Ready` при старте,
-обработка `Pause/Resume/Dispose`.
+- `villageWidget: WidgetDefinition` с `id: "village"`, `assetBundle: "village"`,
+  `create(transport, ctx)`.
+- `worker.ts` — единственная точка входа воркера: `self.onmessage` ↔
+  `Transport`, тик через `setInterval` 100 мс, `Heartbeat` каждые 500 мс,
+  `Ready` при старте, обработка `Pause`/`Resume`/`Dispose`.
 
 Готово: воркер запускается в браузере вручную (проверка — фаза 5), в Node-тестах
 используется `DirectTransport` без `self`.
@@ -432,9 +262,9 @@ export const villageWidget: WidgetDefinition = {
 Файл: `packages/widget-village/src/render/layout.ts`.
 
 - Раскладка: аватар 32×32, имя под ним, `zIndex` по `y`.
-- Имена nodeID: `avatar-<viewerId>`, `avatar-<viewerId>-sprite`,
+- Имена `nodeId`: `avatar-<viewerId>`, `avatar-<viewerId>-sprite`,
   `avatar-<viewerId>-name`.
-- Цвета имени из `ViewerEvent.color` (fallback — палитра из 8 цветов по хешу
+- Цвет имени из `ViewerEvent.color` (fallback — палитра из 8 цветов по хешу
   `viewerId`).
 
 Готово: тест на стабильность `nodeId` для одного `viewerId` и уникальность между
@@ -447,7 +277,7 @@ export const villageWidget: WidgetDefinition = {
 - `Init` → сохранить viewport и конфиг, поставить мир на паузу до `Ready`.
 - `ViewerEvent` → в мир; затем на ближайшем тике — команды.
 - `Viewport` → пересчёт границ, команды только при изменении.
-- `Pause/Resume` → остановка/запуск тика и heartbeat.
+- `Pause`/`Resume` → остановка/запуск тика и heartbeat.
 
 Готово: интеграционный тест на `DirectTransport`: 3 события → ожидаемые команды
 в правильном порядке.
@@ -460,14 +290,14 @@ export const villageWidget: WidgetDefinition = {
 - Детерминизм: одинаковый seed и одинаковые события → байт-в-байт одинаковый
   список команд.
 - Нагрузка: 200 зрителей, 100 тиков — число команд на тик ≤ 3 × число
-  изменившихся сущностей; ни одного кадра дольше 5 мс (замер `performance.now`).
+  изменившихся сущностей; ни одного кадра дольше 5 мс (`performance.now`).
 - Пауза: за 5 с паузы — 0 команд.
 
 Готово: `pnpm -F @tv/widget-village test` зелёный.
 
 **Чекпоинт фазы 3:** мир живёт в тестах без Pixi и без DOM; команды валидны по
-схемам из `protocol` (проверить `Schema.decodeUnknownSync` на каждом
-сгенерированном сообщении).
+схемам из `protocol` (`Schema.decodeUnknownSync` на каждом сгенерированном
+сообщении).
 
 ---
 
@@ -477,15 +307,14 @@ export const villageWidget: WidgetDefinition = {
 
 Файл: `packages/widget-village/scripts/gen-placeholder-assets.mjs`.
 
-- Генерирует 4 аватара × 4 кадра (32×32 PNG) и `name-plate` через `sharp`:
-  простые фигуры (круг/квадрат/треугольник) с разными цветами и смещением кадра.
+- 4 аватара × 4 кадра (32×32 PNG) и `name-plate` через `sharp`: простые фигуры
+  (круг/квадрат/треугольник) с разными цветами и смещением кадра.
 - Кладёт в `packages/widget-village/assets/`.
 - Скрипт идемпотентен: перезапись без изменения mtime при совпадении
   содержимого.
 
-Готово:
-`pnpm -F @tv/widget-village exec node scripts/gen-placeholder-assets.mjs`
-создаёт 17 файлов, которые открываются как PNG.
+Готово: `node scripts/gen-placeholder-assets.mjs` создаёт 17 файлов, которые
+открываются как PNG.
 
 ### Шаг 40. Конфиг assetpack
 
@@ -517,10 +346,10 @@ JSON-строки).
 
 - Список `assetId`, которые использует виджет, — константы
   (`avatar/<index>/<frame>`, `name-plate`).
-- В `SetAnimation` уходят только `assetId`; никаких текстур в воркере нет.
+- В `SetAnimation` уходят только `assetId`; текстур в воркере нет.
 
 Готово: набор `assetId` сверяется тестом с реальными ключами `manifest.json`
-(тест читает сгенерированный манифест — защита от рассинхрона).
+(защита от рассинхрона).
 
 ### Шаг 43. Эффект в деревне
 
@@ -547,7 +376,7 @@ JSON-строки).
 
 - `interface ViewerEventSource { subscribe(handler); start(config); stop(); }`.
 - `MockEventSource`: детерминированный PRNG (mulberry32) с seed, режимы `manual`
-  и `auto` (интервал 1–3 с, случайное событие по весам).
+  и `auto` (интервал 1-3 с, случайное событие по весам).
 - Библиотека имён и палитра — константы.
 
 Готово: тест «seed 42 → одинаковая последовательность событий», «stop → нет
@@ -560,17 +389,10 @@ JSON-строки).
 
 - Парсинг query: `?widgets=village&debug=1&seed=42&mode=manual`.
 - Создание `PIXI.Application`, `createRenderCore`, регистрация дескриптора
-  деревни:
-
-```ts
-const worker = new Worker(
-  new URL("@tv/widget-village/worker", import.meta.url),
-  { type: "module" },
-);
-```
-
+  деревни с воркером
+  (`new Worker(new URL("@tv/widget-village/worker", import.meta.url), { type: "module" })`).
 - `event-mock` → `core.scene.dispatch(ViewerEvent)`.
-- Обработка `visibilitychange` → `Pause/Resume`.
+- Обработка `visibilitychange` → `Pause`/`Resume`.
 
 Готово: `pnpm dev` открывает страницу, в консоли — активация виджета и
 `Hello from worker`.
@@ -581,8 +403,7 @@ const worker = new Worker(
 
 - `worker: { format: "es" }`, `build.target: "es2022"`.
 - `optimizeDeps.exclude: ["@tv/*"]`, alias на `src` пакетов.
-- Ассеты: `publicDir` указывает на `dist-assets` через `viteStaticCopy` или
-  symlink/копирование в `assets` — выбрать копирование (проще, предсказуемо).
+- Ассеты: копирование `dist-assets` в `assets` (проще и предсказуемее symlink).
 - `server.port: 5173`, `server.host: true` (нужно для OBS).
 
 Готово: `pnpm -F @tv/overlay build` создаёт `dist` с отдельным чанком воркера и
@@ -604,8 +425,6 @@ const worker = new Worker(
 
 ### Шаг 48. Смоук в браузере
 
-Действия:
-
 1. `pnpm dev`, открыть `http://localhost:5173/?debug=1`.
 2. Debug: «спавн зрителя» × 5 → пять аватаров с именами.
 3. «подарок» → пульсация (эффект) и `celebrate`.
@@ -614,8 +433,8 @@ const worker = new Worker(
 6. В OBS: Browser Source на тот же URL, 1920×1080, проверка позиционирования и
    `devicePixelRatio`.
 
-Готово: все шесть пунктов проходят без ошибок в консоли; зафиксировать
-скриншот/заметку в PR.
+Готово: все шесть пунктов проходят без ошибок в консоли; скриншот или заметка
+приложены к PR.
 
 **Чекпоинт фазы 5:** продукт виден в OBS, деревня реагирует на мок-события,
 debug-панель управляет жизненным циклом.
@@ -641,8 +460,8 @@ debug-панель управляет жизненным циклом.
 
 Файл: `packages/core/src/__tests__/lifecycle.test.ts`.
 
-- 20 циклов activate/deactivate: число контейнеров на `stage` = 0, число
-  воркеров = 0, `Assets` не держит бандл, `EffectRegistry` не держит экземпляры.
+- 20 циклов activate/deactivate: контейнеров на `stage` = 0, воркеров = 0,
+  `Assets` не держит бандл, `EffectRegistry` не держит экземпляры.
 
 Готово: тест зелёный, `scene.list()` пуст после цикла.
 
@@ -650,11 +469,11 @@ debug-панель управляет жизненным циклом.
 
 Файл: `packages/protocol/src/__tests__/budget.test.ts`.
 
-- Проверка, что сериализованный `Batch` для 200 зрителей укладывается в 256 КБ и
-  не содержит запрещённых типов (функции, классы, `undefined` в значениях).
+- Сериализованный `Batch` для 200 зрителей укладывается в 256 КБ и не содержит
+  запрещённых типов (функции, классы, `undefined` в значениях).
 
-Готово: тест зелёный; при превышении — план действий (уменьшить частоту
-`SetTransform` до каждого второго тика).
+Готово: тест зелёный; при превышении — уменьшить частоту `SetTransform` до
+каждого второго тика.
 
 ### Шаг 52. Документация запуска
 
@@ -693,7 +512,7 @@ pnpm build
    сообщения и подарки.
 2. Вся логика виджета — в отдельном Worker'е; `pixi.js` физически недоступен из
    пакета виджета (линт + граф зависимостей).
-3. Падение/зависание воркера: контейнер скрыт, статус `crashed`, рендер и
+3. Падение или зависание воркера: контейнер скрыт, статус `crashed`, рендер и
    страница живы, реактивация работает.
 4. Горячее переключение виджета не пересоздаёт `PIXI.Application` и не течёт.
 5. События приходят из `event-mock`; замена на реальный Twitch — работа только
