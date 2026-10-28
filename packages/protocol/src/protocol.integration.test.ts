@@ -4,8 +4,8 @@ import {
 	CoreToWidgetSchema,
 	PROTOCOL_MAJOR,
 	PROTOCOL_VERSION,
-	RenderCommandSchema,
 	WidgetEventSchema,
+	WidgetToCoreMessageSchema,
 	WidgetToCoreSchema,
 	createDirectTransportPair,
 	isCompatible,
@@ -44,7 +44,7 @@ describe("protocol integration", () => {
 		coreSide.subscribe((envelope) => {
 			const decoded = Schema.decodeUnknownSync(WidgetToCoreSchema)(envelope);
 			receivedCommands.push(
-				Schema.decodeUnknownSync(RenderCommandSchema)(decoded.message),
+				Schema.decodeUnknownSync(WidgetToCoreMessageSchema)(decoded.message),
 			);
 		});
 
@@ -104,7 +104,7 @@ describe("protocol integration", () => {
 
 		coreSide.subscribe((envelope) => {
 			Schema.decodeUnknownSync(WidgetToCoreSchema)(envelope);
-			Schema.decodeUnknownSync(RenderCommandSchema)(envelope.message);
+			Schema.decodeUnknownSync(WidgetToCoreMessageSchema)(envelope.message);
 		});
 
 		expect(() => {
@@ -127,7 +127,7 @@ describe("protocol integration", () => {
 
 		coreSide.subscribe((envelope) => {
 			const decoded = Schema.decodeUnknownSync(WidgetToCoreSchema)(envelope);
-			const command = Schema.decodeUnknownSync(RenderCommandSchema)(
+			const command = Schema.decodeUnknownSync(WidgetToCoreMessageSchema)(
 				decoded.message,
 			);
 			if (command._tag === "Heartbeat") {

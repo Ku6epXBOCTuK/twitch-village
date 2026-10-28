@@ -212,7 +212,7 @@ describe("envelopes", () => {
 		).toEqual({ protocolVersion: 1, message: { _tag: "Pause" } });
 	});
 
-	it("WidgetToCore carries protocolVersion and a render command", () => {
+	it("WidgetToCore carries protocolVersion and a widget-to-core message", () => {
 		expect(
 			toCore.decode({
 				protocolVersion: 1,
@@ -221,6 +221,15 @@ describe("envelopes", () => {
 		).toEqual({
 			protocolVersion: 1,
 			message: { _tag: "Heartbeat", tick: 7 },
+		});
+		expect(
+			toCore.decode({
+				protocolVersion: 1,
+				message: { _tag: "RemoveNode", nodeId: "avatar:1" },
+			}),
+		).toEqual({
+			protocolVersion: 1,
+			message: { _tag: "RemoveNode", nodeId: "avatar:1" },
 		});
 	});
 

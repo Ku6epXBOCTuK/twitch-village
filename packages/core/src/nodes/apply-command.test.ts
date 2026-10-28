@@ -615,24 +615,4 @@ describe("applyCommand", () => {
 			},
 		);
 	});
-
-	it("rejects Ready as a render command", async () => {
-		const { ctx } = setup();
-
-		const error = await runError(ctx, {
-			_tag: "Ready",
-			widgetId,
-			protocolVersion: 1,
-		});
-
-		expectTag(error, "InvalidCommand");
-	});
-
-	it("rejects Heartbeat as a render command", async () => {
-		const { ctx } = setup();
-
-		const error = await runError(ctx, { _tag: "Heartbeat", tick: 1 });
-
-		expectTag(error, "InvalidCommand");
-	});
 });

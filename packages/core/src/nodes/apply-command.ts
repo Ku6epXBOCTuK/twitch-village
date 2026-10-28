@@ -224,26 +224,6 @@ export const applyCommand = Effect.fnUntraced(function* (
 ): Effect.fn.Return<ApplyCommandResult> {
 	return yield* Match.value(command).pipe(
 		Match.tag("Batch", ({ commands }) => applyBatch(ctx, commands)),
-		Match.tag("Heartbeat", () =>
-			asResult(
-				Effect.fail(
-					new InvalidCommand({
-						widgetId: ctx.widgetId,
-						message: "Heartbeat must not be applied to the render tree",
-					}),
-				),
-			),
-		),
-		Match.tag("Ready", () =>
-			asResult(
-				Effect.fail(
-					new InvalidCommand({
-						widgetId: ctx.widgetId,
-						message: "Ready must not be applied to the render tree",
-					}),
-				),
-			),
-		),
 		Match.orElse((leaf) => asResult(applyLeaf(ctx, leaf))),
 	);
 });

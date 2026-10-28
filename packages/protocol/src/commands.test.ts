@@ -2,7 +2,7 @@ import { Match } from "effect";
 import * as Schema from "effect/Schema";
 import * as SchemaIssue from "effect/SchemaIssue";
 import { describe, expect, it } from "vitest";
-import { RenderCommandSchema } from "./commands";
+import { RenderCommandSchema, ServiceMessageSchema } from "./commands";
 import type { RenderCommand } from "./commands";
 
 declare const structuredClone: <T>(value: T) => T;
@@ -88,8 +88,6 @@ const validCommands: ReadonlyArray<unknown> = [
 	{ _tag: "RemoveFilter", nodeId, effectId: "glow_pulse" },
 	{ _tag: "RemoveNode", nodeId },
 	{ _tag: "Batch", commands: [{ _tag: "RemoveNode", nodeId }] },
-	{ _tag: "Ready", widgetId: "village", protocolVersion: 1 },
-	{ _tag: "Heartbeat", tick: 12 },
 ];
 
 const describeCommand = (command: RenderCommand): string => {
@@ -105,8 +103,6 @@ const describeCommand = (command: RenderCommand): string => {
 		RemoveFilter: (c) => c._tag,
 		RemoveNode: (c) => c._tag,
 		Batch: (c) => c._tag,
-		Ready: (c) => c._tag,
-		Heartbeat: (c) => c._tag,
 	});
 };
 
@@ -147,7 +143,6 @@ describe("RenderCommandSchema", () => {
 	it("matches every variant exhaustively", () => {
 		expect(describeCommand(decode(validCommands[0]))).toBe("CreateNode");
 		expect(describeCommand(decode(validCommands[12]))).toBe("Batch");
-		expect(describeCommand(decode(validCommands[14]))).toBe("Heartbeat");
 	});
 
 	it("rejects an unknown tag", () => {
@@ -207,5 +202,26 @@ describe("RenderCommandSchema", () => {
 			_tag: "Batch",
 			commands: [{ _tag: "Batch", commands: [] }],
 		});
+	});
+});
+
+describe("ServiceMessageSchema", () => {
+	const decodeService = (input: unknown) => {
+		return Schema.decodeUnknownResult(ServiceMessageSchema)(input, {
+			onExcessProperty: "error",
+		});
+	};
+
+	it("accepts Ready and Heartbeat", () => {
+		expect(
+			decodeService({ _tag: "Ready", widgetId: "village", protocolVersion: 1 })
+				._tag,
+		).toBe("Success");
+		expect(decodeService({ _tag: "Heartbeat", tick: 12 })._tag).toBe("Success");
+	});
+
+	it("keeps service messages out of render commands", () => {
+		expectInvalid({ _tag: "Ready", widgetId: "village", protocolVersion: 1 });
+		expectInvalid({ _tag: "Heartbeat", tick: 1 });
 	});
 });

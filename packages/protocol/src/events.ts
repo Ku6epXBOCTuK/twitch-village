@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { RenderCommandSchema } from "./commands";
+import { RenderCommandSchema, ServiceMessageSchema } from "./commands";
 import { ViewerId, WidgetId } from "./ids";
 
 export const ViewerJoined = Schema.TaggedStruct("ViewerJoined", {
@@ -69,9 +69,14 @@ export const CoreToWidgetSchema = Schema.Struct({
 	message: WidgetEventSchema,
 });
 
+export const WidgetToCoreMessageSchema = Schema.Union([
+	RenderCommandSchema,
+	ServiceMessageSchema,
+]);
+
 export const WidgetToCoreSchema = Schema.Struct({
 	protocolVersion: Schema.Int,
-	message: RenderCommandSchema,
+	message: WidgetToCoreMessageSchema,
 });
 
 export type ViewerEvent = Schema.Schema.Type<typeof ViewerEventSchema>;

@@ -95,10 +95,11 @@ export const Heartbeat = Schema.TaggedStruct("Heartbeat", {
 	tick: Schema.Int,
 });
 
+export const ServiceMessageSchema = Schema.Union([Ready, Heartbeat]);
+export type ServiceMessage = Schema.Schema.Type<typeof ServiceMessageSchema>;
+
 export const RenderCommandSchema = Schema.Union([
 	...LeafCommandSchema.members,
 	Batch,
-	Ready,
-	Heartbeat,
 ]);
 export type RenderCommand = Schema.Schema.Type<typeof RenderCommandSchema>;
