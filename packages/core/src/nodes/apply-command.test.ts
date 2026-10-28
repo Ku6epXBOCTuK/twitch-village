@@ -12,6 +12,7 @@ import { createFakeRenderTarget } from "../testing/fake-render-target";
 import {
 	applyCommand,
 	type ApplyCommandContext,
+	type ApplyCommandResult,
 	type FilterSource,
 	type RenderError,
 	type TextureSource,
@@ -121,14 +122,23 @@ const setup = (options: { readonly crashOn?: CrashableMethod } = {}) => {
 	};
 };
 
-const run = (ctx: ApplyCommandContext, command: RenderCommand): Promise<void> =>
-	Effect.runPromise(applyCommand(ctx, command));
-
-const runError = (
+const run = (
 	ctx: ApplyCommandContext,
 	command: RenderCommand,
-): Promise<RenderError> =>
-	Effect.runPromise(Effect.flip(applyCommand(ctx, command)));
+): Promise<ApplyCommandResult> => Effect.runPromise(applyCommand(ctx, command));
+
+const onlyError = (errors: readonly RenderError[]): RenderError => {
+	const [error] = errors;
+	if (error === undefined) {
+		throw new Error("Expected the command to report an error");
+	}
+	return error;
+};
+
+const runError = async (
+	ctx: ApplyCommandContext,
+	command: RenderCommand,
+): Promise<RenderError> => onlyError((await run(ctx, command)).errors);
 
 const expectTag: <Tag extends RenderError["_tag"]>(
 	error: RenderError,
@@ -428,7 +438,7 @@ describe("applyCommand", () => {
 		const { ctx, calls } = setup();
 		const style = { fontSize: 12, fill: "#000000", align: "left" as const };
 
-		await run(ctx, {
+		const { errors, skipped } = await run(ctx, {
 			_tag: "Batch",
 			commands: [
 				{ _tag: "SetTransform", nodeId, x: 1 },
@@ -440,41 +450,121 @@ describe("applyCommand", () => {
 			"setTransform",
 			"setText",
 		]);
+		expect(errors).toEqual([]);
+		expect(skipped).toBe(0);
 	});
 
-	it("Batch stops at the first failing command", async () => {
+	it("Batch applies the commands after a failing one", async () => {
 		const { ctx, calls } = setup();
-		const ghost = asNodeId("ghost");
 
-		const error = await runError(ctx, {
+		const { errors, skipped } = await run(ctx, {
 			_tag: "Batch",
 			commands: [
-				{ _tag: "SetTransform", nodeId: ghost, x: 1 },
+				{ _tag: "SetTransform", nodeId: asNodeId("ghost"), x: 1 },
 				{ _tag: "SetTransform", nodeId, x: 2 },
 			],
 		});
 
-		expectTag(error, "UnknownNode");
-		expect(calls()).toEqual([]);
+		expectTag(onlyError(errors), "UnknownNode");
+		expect(skipped).toBe(0);
+		expect(calls()).toEqual([
+			{ method: "setTransform", args: [nodeId, { x: 2 }] },
+		]);
+	});
+
+	it("Batch reports every failing command", async () => {
+		const { ctx, calls } = setup();
+
+		const { errors } = await run(ctx, {
+			_tag: "Batch",
+			commands: [
+				{ _tag: "SetTransform", nodeId: asNodeId("ghost:1"), x: 1 },
+				{ _tag: "SetTransform", nodeId, x: 2 },
+				{ _tag: "SetTransform", nodeId: asNodeId("ghost:2"), x: 3 },
+			],
+		});
+
+		expect(errors.map((error) => error._tag)).toEqual([
+			"UnknownNode",
+			"UnknownNode",
+		]);
+		expect(calls()).toEqual([
+			{ method: "setTransform", args: [nodeId, { x: 2 }] },
+		]);
 	});
 
 	it("Batch keeps the commands applied before the failure", async () => {
 		const { ctx, calls } = setup();
-		const ghost = asNodeId("ghost");
 
-		const error = await runError(ctx, {
+		const { errors } = await run(ctx, {
 			_tag: "Batch",
 			commands: [
 				{ _tag: "SetTransform", nodeId, x: 1 },
-				{ _tag: "SetTransform", nodeId: ghost, x: 2 },
+				{ _tag: "SetTransform", nodeId: asNodeId("ghost"), x: 2 },
 				{ _tag: "SetTransform", nodeId, x: 3 },
 			],
 		});
 
-		expectTag(error, "UnknownNode");
+		expectTag(onlyError(errors), "UnknownNode");
 		expect(calls()).toEqual([
 			{ method: "setTransform", args: [nodeId, { x: 1 }] },
+			{ method: "setTransform", args: [nodeId, { x: 3 }] },
 		]);
+	});
+
+	it("Batch drops the rest after 16 errors", async () => {
+		const { ctx, calls } = setup();
+		const ghosts = Array.from({ length: 20 }, (_, index) => ({
+			_tag: "SetTransform" as const,
+			nodeId: asNodeId(`ghost:${index}`),
+			x: index,
+		}));
+
+		const { errors, skipped } = await run(ctx, {
+			_tag: "Batch",
+			commands: [...ghosts, { _tag: "SetTransform", nodeId, x: 100 }],
+		});
+
+		expect(errors).toHaveLength(16);
+		expect(skipped).toBe(5);
+		expect(calls()).toEqual([]);
+	});
+
+	it("Batch skips nothing when the limit hits the last command", async () => {
+		const { ctx, calls } = setup();
+		const ghosts = Array.from({ length: 15 }, (_, index) => ({
+			_tag: "SetTransform" as const,
+			nodeId: asNodeId(`ghost:${index}`),
+			x: index,
+		}));
+
+		const { errors, skipped } = await run(ctx, {
+			_tag: "Batch",
+			commands: [
+				...ghosts,
+				{ _tag: "SetTransform", nodeId, x: 7 },
+				{ _tag: "SetTransform", nodeId: asNodeId("ghost:last"), x: 99 },
+			],
+		});
+
+		expect(errors).toHaveLength(16);
+		expect(skipped).toBe(0);
+		expect(calls()).toEqual([
+			{ method: "setTransform", args: [nodeId, { x: 7 }] },
+		]);
+	});
+
+	it("reports a single failing command instead of failing the effect", async () => {
+		const { ctx } = setup();
+
+		const { errors, skipped } = await run(ctx, {
+			_tag: "SetTransform",
+			nodeId: asNodeId("ghost"),
+			x: 1,
+		});
+
+		expectTag(onlyError(errors), "UnknownNode");
+		expect(skipped).toBe(0);
 	});
 
 	it("rejects an unknown node from the render target", async () => {

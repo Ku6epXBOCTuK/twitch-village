@@ -79,6 +79,23 @@ export interface ApplyCommandContext {
 	readonly effects: FilterSource;
 }
 
+export interface ApplyCommandResult {
+	readonly errors: readonly RenderError[];
+	readonly skipped: number;
+}
+
+export const DEFAULT_MAX_BATCH_ERRORS = 16;
+
+const noErrors: ApplyCommandResult = { errors: [], skipped: 0 };
+
+const asResult = <A>(
+	effect: Effect.Effect<A, RenderError>,
+): Effect.Effect<ApplyCommandResult> =>
+	Effect.match(effect, {
+		onFailure: (error) => ({ errors: [error], skipped: 0 }),
+		onSuccess: () => noErrors,
+	});
+
 const applyLeaf = Effect.fnUntraced(function* (
 	ctx: ApplyCommandContext,
 	command: LeafCommand,
@@ -158,33 +175,60 @@ const applyLeaf = Effect.fnUntraced(function* (
 	});
 });
 
+const applyBatch = Effect.fnUntraced(function* (
+	ctx: ApplyCommandContext,
+	commands: readonly LeafCommand[],
+): Effect.fn.Return<ApplyCommandResult> {
+	const resultErrors: RenderError[] = [];
+
+	for (const [index, leaf] of commands.entries()) {
+		yield* Effect.match(applyLeaf(ctx, leaf), {
+			onFailure: (error) => {
+				resultErrors.push(error);
+			},
+			onSuccess: () => {},
+		});
+
+		if (resultErrors.length >= DEFAULT_MAX_BATCH_ERRORS) {
+			return {
+				errors: resultErrors,
+				skipped: commands.length - index - 1,
+			};
+		}
+	}
+
+	return {
+		errors: resultErrors,
+		skipped: 0,
+	};
+});
+
 export const applyCommand = Effect.fnUntraced(function* (
 	ctx: ApplyCommandContext,
 	command: RenderCommand,
-): Effect.fn.Return<void, RenderError> {
-	yield* Match.value(command).pipe(
-		Match.tag("Batch", ({ commands }) =>
-			Effect.forEach(commands, (leaf) => applyLeaf(ctx, leaf), {
-				concurrency: 1,
-				discard: true,
-			}),
-		),
+): Effect.fn.Return<ApplyCommandResult> {
+	return yield* Match.value(command).pipe(
+		Match.tag("Batch", ({ commands }) => applyBatch(ctx, commands)),
 		Match.tag("Heartbeat", () =>
-			Effect.fail(
-				new InvalidCommand({
-					widgetId: ctx.widgetId,
-					message: "Heartbeat must not be applied to the render tree",
-				}),
+			asResult(
+				Effect.fail(
+					new InvalidCommand({
+						widgetId: ctx.widgetId,
+						message: "Heartbeat must not be applied to the render tree",
+					}),
+				),
 			),
 		),
 		Match.tag("Ready", () =>
-			Effect.fail(
-				new InvalidCommand({
-					widgetId: ctx.widgetId,
-					message: "Ready must not be applied to the render tree",
-				}),
+			asResult(
+				Effect.fail(
+					new InvalidCommand({
+						widgetId: ctx.widgetId,
+						message: "Ready must not be applied to the render tree",
+					}),
+				),
 			),
 		),
-		Match.orElse((leaf) => applyLeaf(ctx, leaf)),
+		Match.orElse((leaf) => asResult(applyLeaf(ctx, leaf))),
 	);
 });
