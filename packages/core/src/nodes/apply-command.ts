@@ -48,18 +48,16 @@ export const isRenderError = (error: unknown): error is RenderError => {
 	);
 };
 
-function toRenderError(
+function toRenderFailed(
 	ctx: ApplyCommandContext,
 	command: RenderCommand,
 	error: unknown,
 ) {
-	return isRenderError(error)
-		? error
-		: new RenderFailed({
-				widgetId: ctx.widgetId,
-				message: `Unexpected render error: widgetId ${ctx.widgetId}, command ${command._tag}, err ${error}`,
-				...("nodeId" in command ? { nodeId: command.nodeId } : {}),
-			});
+	return new RenderFailed({
+		widgetId: ctx.widgetId,
+		message: `Unexpected render error: widgetId ${ctx.widgetId}, command ${command._tag}, err ${error}`,
+		...("nodeId" in command ? { nodeId: command.nodeId } : {}),
+	});
 }
 
 export interface TextureSource {
@@ -100,10 +98,22 @@ const applyLeaf = Effect.fnUntraced(function* (
 	ctx: ApplyCommandContext,
 	command: LeafCommand,
 ): Effect.fn.Return<void, RenderError> {
-	function attempt<A>(run: () => A) {
+	function attemptPort<A>(run: () => A): Effect.Effect<A, RenderError> {
+		return Effect.matchEffect(
+			Effect.try({ try: run, catch: (error) => error }),
+			{
+				onFailure: (error) =>
+					isRenderError(error) ? Effect.fail(error) : Effect.die(error),
+				onSuccess: (value) => Effect.succeed(value),
+			},
+		);
+	}
+
+	function attemptForeign<A>(run: () => A): Effect.Effect<A, RenderError> {
 		return Effect.try({
 			try: run,
-			catch: (error) => toRenderError(ctx, command, error),
+			catch: (error) =>
+				isRenderError(error) ? error : toRenderFailed(ctx, command, error),
 		});
 	}
 
@@ -135,43 +145,47 @@ const applyLeaf = Effect.fnUntraced(function* (
 
 	yield* Match.valueTags(command, {
 		CreateNode: ({ nodeId, kind }) =>
-			attempt(() => ctx.registry.create(nodeId, kind)),
-		RemoveNode: ({ nodeId }) => attempt(() => ctx.registry.remove(nodeId)),
+			attemptForeign(() => ctx.registry.create(nodeId, kind)),
+		RemoveNode: ({ nodeId }) =>
+			attemptForeign(() => ctx.registry.remove(nodeId)),
 		SetParent: ({ nodeId, parentId, order }) =>
-			attempt(() => ctx.target.setParent(nodeId, parentId, order)),
+			attemptForeign(() => ctx.target.setParent(nodeId, parentId, order)),
 		SetTransform: ({ nodeId, _tag, ...rest }) =>
-			attempt(() => ctx.target.setTransform(nodeId, rest)),
+			attemptForeign(() => ctx.target.setTransform(nodeId, rest)),
 		SetSprite: ({ nodeId, assetId }) =>
-			attempt(() =>
-				ctx.target.setSprite(nodeId, ctx.textures.getTexture(assetId)),
+			Effect.flatMap(
+				attemptPort(() => ctx.textures.getTexture(assetId)),
+				(texture) =>
+					attemptForeign(() => ctx.target.setSprite(nodeId, texture)),
 			),
 		SetAnimation: ({ nodeId, assetIds, fps, loop }) =>
-			attempt(() =>
-				ctx.target.setAnimation(
-					nodeId,
-					assetIds.map((assetId) => ctx.textures.getTexture(assetId)),
-					fps,
-					loop,
+			Effect.flatMap(
+				Effect.forEach(assetIds, (assetId) =>
+					attemptPort(() => ctx.textures.getTexture(assetId)),
 				),
+				(textures) =>
+					attemptForeign(() =>
+						ctx.target.setAnimation(nodeId, textures, fps, loop),
+					),
 			),
 		SetText: ({ nodeId, text, style }) =>
-			attempt(() => ctx.target.setText(nodeId, text, style)),
+			attemptForeign(() => ctx.target.setText(nodeId, text, style)),
 		AddFilter: ({ nodeId, effectId }) =>
-			attempt(() =>
-				ctx.target.addFilter(
-					nodeId,
-					effectId,
-					ctx.effects.get(effectId, nodeId),
-				),
+			Effect.flatMap(
+				attemptPort(() => ctx.effects.get(effectId, nodeId)),
+				(filter) =>
+					attemptForeign(() => ctx.target.addFilter(nodeId, effectId, filter)),
 			),
 		RemoveFilter: ({ nodeId, effectId }) =>
-			attempt(() => ctx.target.removeFilter(nodeId, effectId)),
-		SetFilterParam: ({ nodeId, effectId, param, value }) => {
-			ctx.effects.setParam(effectId, param, value);
-			return attempt(() =>
-				ctx.target.setFilterParam(nodeId, effectId, param, value),
-			);
-		},
+			attemptForeign(() => ctx.target.removeFilter(nodeId, effectId)),
+		SetFilterParam: ({ nodeId, effectId, param, value }) =>
+			Effect.flatMap(
+				attemptPort(() => ctx.effects.setParam(effectId, param, value)),
+				() =>
+					attemptForeign(() =>
+						ctx.target.setFilterParam(nodeId, effectId, param, value),
+					),
+			),
 	});
 });
 

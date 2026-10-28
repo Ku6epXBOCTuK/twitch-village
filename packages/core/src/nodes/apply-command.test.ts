@@ -554,6 +554,28 @@ describe("applyCommand", () => {
 		]);
 	});
 
+	it("treats an unexpected throw from a port as a defect", async () => {
+		const { ctx } = setup();
+		const broken: ApplyCommandContext = {
+			...ctx,
+			textures: {
+				getTexture() {
+					throw new Error("boom-42");
+				},
+			},
+		};
+
+		await expect(
+			Effect.runPromise(
+				applyCommand(broken, {
+					_tag: "SetSprite",
+					nodeId,
+					assetId: asAssetId("tex"),
+				}),
+			),
+		).rejects.toThrow("boom-42");
+	});
+
 	it("reports a single failing command instead of failing the effect", async () => {
 		const { ctx } = setup();
 
