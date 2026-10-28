@@ -6,6 +6,7 @@ import {
 	type NodeId,
 	type WidgetId,
 } from "@tv/protocol";
+import { Effect } from "effect";
 import type { Filter } from "pixi.js";
 import type { EffectDefinition, EffectManifest } from "./effect-manifest";
 
@@ -27,16 +28,17 @@ export interface EffectRegistry {
 	get(
 		effectId: EffectId,
 		nodeId: NodeId,
-	): Filter | EffectNotFound | EffectCompileFailed;
+	): Effect.Effect<Filter, EffectNotFound | EffectCompileFailed>;
 	// NOTE: the registry only validates against the manifest bounds; applying
 	// the uniform stays in the render target.
 	setParam(
 		effectId: EffectId,
 		param: string,
 		value: number,
-	): EffectNotFound | InvalidEffectParam | null;
+	): Effect.Effect<void, EffectNotFound | InvalidEffectParam>;
 	isBroken(effectId: EffectId): boolean;
-	clear(): void;
+	release(nodeId: NodeId): Effect.Effect<void>;
+	clear(): Effect.Effect<void>;
 }
 
 export function createEffectRegistry(
@@ -45,6 +47,30 @@ export function createEffectRegistry(
 	const definitions = new Map<EffectId, EffectDefinition>();
 	const brokenEffects = new Set<EffectId>();
 	const instances = new Map<EffectId, Map<NodeId, Filter>>();
+
+	function validate(manifest: EffectManifest): void {
+		const effectIds = new Set<EffectId>();
+		for (const effect of manifest.effects) {
+			if (effectIds.has(effect.effectId)) {
+				throw new Error(
+					`Manifest error: duplicate effectId ${effect.effectId}`,
+				);
+			}
+			effectIds.add(effect.effectId);
+			for (const param of effect.params) {
+				if (param.max < param.min) {
+					throw new Error(
+						`Manifest error: bounds are inverted for param ${param.name} in effect ${effect.effectId}`,
+					);
+				}
+				if (param.default > param.max || param.default < param.min) {
+					throw new Error(
+						`Manifest error: invalid default value for param ${param.name} in effect ${effect.effectId}`,
+					);
+				}
+			}
+		}
+	}
 
 	function definitionOf(effectId: EffectId): EffectDefinition | EffectNotFound {
 		const effect = definitions.get(effectId);
@@ -69,89 +95,105 @@ export function createEffectRegistry(
 		});
 	}
 
+	function destroyInstances(): void {
+		for (const byNode of instances.values()) {
+			for (const filter of byNode.values()) {
+				filter.destroy();
+			}
+		}
+		instances.clear();
+	}
+
 	return {
 		register: (manifest: EffectManifest) => {
-			const effectIds = new Set<EffectId>();
-			for (const effect of manifest.effects) {
-				if (effectIds.has(effect.effectId)) {
-					throw new Error(
-						`Manifest error: duplicate effectId ${effect.effectId}`,
-					);
-				}
-				effectIds.add(effect.effectId);
-				for (const param of effect.params) {
-					if (param.max < param.min) {
-						throw new Error(
-							`Manifest error: bounds are inverted for param ${param.name} in effect ${effect.effectId}`,
-						);
-					}
-					if (param.default > param.max || param.default < param.min) {
-						throw new Error(
-							`Manifest error: invalid default value for param ${param.name} in effect ${effect.effectId}`,
-						);
-					}
-				}
-			}
-
+			validate(manifest);
+			destroyInstances();
+			brokenEffects.clear();
+			definitions.clear();
 			for (const effect of manifest.effects) {
 				definitions.set(effect.effectId, effect);
 			}
 		},
-		get: (effectId: EffectId, nodeId: NodeId) => {
-			const effect = definitionOf(effectId);
-			if (effect instanceof EffectNotFound) return effect;
-			if (brokenEffects.has(effectId))
-				return effectCompileFailed(
-					effectId,
-					`Effect ${effectId} is broken in widget ${options.widgetId}; it stays off until the widget restarts`,
-				);
-			let byNode = instances.get(effectId);
-			if (byNode === undefined) {
-				byNode = new Map();
-				instances.set(effectId, byNode);
-			}
-			let filter = byNode.get(nodeId);
-			if (filter === undefined) {
-				try {
-					filter = options.compiler.compile(effect);
-				} catch (error) {
-					brokenEffects.add(effectId);
-					return effectCompileFailed(
-						effectId,
-						`Effect ${effectId} failed to compile in widget ${options.widgetId}: ${error instanceof Error ? error.message : String(error)}`,
-					);
-				}
-			}
-			byNode.set(nodeId, filter);
+		get: (effectId: EffectId, nodeId: NodeId) =>
+			Effect.suspend(
+				(): Effect.Effect<Filter, EffectNotFound | EffectCompileFailed> => {
+					const effect = definitionOf(effectId);
+					if (effect instanceof EffectNotFound) return Effect.fail(effect);
+					if (brokenEffects.has(effectId))
+						return Effect.fail(
+							effectCompileFailed(
+								effectId,
+								`Effect ${effectId} is broken in widget ${options.widgetId}; it stays off until the widget restarts`,
+							),
+						);
+					let byNode = instances.get(effectId);
+					if (byNode === undefined) {
+						byNode = new Map();
+						instances.set(effectId, byNode);
+					}
+					let filter = byNode.get(nodeId);
+					if (filter === undefined) {
+						try {
+							filter = options.compiler.compile(effect);
+						} catch (error) {
+							brokenEffects.add(effectId);
+							return Effect.fail(
+								effectCompileFailed(
+									effectId,
+									`Effect ${effectId} failed to compile in widget ${options.widgetId}: ${error instanceof Error ? error.message : String(error)}`,
+								),
+							);
+						}
+					}
+					byNode.set(nodeId, filter);
 
-			return filter;
-		},
-		setParam: (effectId: EffectId, param: string, value: number) => {
-			const effect = definitionOf(effectId);
-			if (effect instanceof EffectNotFound) return effect;
-			const effectParam = effect.params.find(
-				(paramDef) => paramDef.name === param,
-			);
-			if (effectParam === undefined)
-				return new InvalidEffectParam({
-					widgetId: options.widgetId,
-					message: `Effect ${effectId} has no param ${param} in widget ${options.widgetId}`,
-					effectId,
-					param,
-				});
-			if (value < effectParam.min || value > effectParam.max)
-				return new InvalidEffectParam({
-					widgetId: options.widgetId,
-					message: `Effect ${effectId} param ${param}=${value}  is outside ${effectParam.min}..${effectParam.max} in widget ${options.widgetId}`,
-					effectId,
-					param,
-				});
-			return null;
-		},
+					return Effect.succeed(filter);
+				},
+			),
+		setParam: (effectId: EffectId, param: string, value: number) =>
+			Effect.suspend(
+				(): Effect.Effect<void, EffectNotFound | InvalidEffectParam> => {
+					const effect = definitionOf(effectId);
+					if (effect instanceof EffectNotFound) return Effect.fail(effect);
+					const effectParam = effect.params.find(
+						(paramDef) => paramDef.name === param,
+					);
+					if (effectParam === undefined)
+						return Effect.fail(
+							new InvalidEffectParam({
+								widgetId: options.widgetId,
+								message: `Effect ${effectId} has no param ${param} in widget ${options.widgetId}`,
+								effectId,
+								param,
+							}),
+						);
+					if (value < effectParam.min || value > effectParam.max)
+						return Effect.fail(
+							new InvalidEffectParam({
+								widgetId: options.widgetId,
+								message: `Effect ${effectId} param ${param}=${value}  is outside ${effectParam.min}..${effectParam.max} in widget ${options.widgetId}`,
+								effectId,
+								param,
+							}),
+						);
+					return Effect.void;
+				},
+			),
 		isBroken: (effectId: EffectId) => brokenEffects.has(effectId),
-		clear: () => {
-			brokenEffects.clear();
-			instances.clear();
-		},
+		release: (nodeId: NodeId) =>
+			Effect.sync(() => {
+				for (const [effectId, byNode] of instances) {
+					const filter = byNode.get(nodeId);
+					if (filter === undefined) continue;
+					filter.destroy();
+					byNode.delete(nodeId);
+					if (byNode.size === 0) instances.delete(effectId);
+				}
+			}),
+		clear: () =>
+			Effect.sync(() => {
+				destroyInstances();
+				brokenEffects.clear();
+			}),
 	};
 }

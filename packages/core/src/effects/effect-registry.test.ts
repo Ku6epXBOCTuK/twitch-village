@@ -6,6 +6,7 @@ import {
 	type NodeId,
 	type WidgetId,
 } from "@tv/protocol";
+import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import {
 	createFakeEffectCompiler,
@@ -22,6 +23,9 @@ const asNodeId = (value: string): NodeId => value as NodeId;
 
 const glow = asEffectId("glow_pulse");
 const outline = asEffectId("outline");
+
+const nodeOne = asNodeId("node-1");
+const nodeTwo = asNodeId("node-2");
 
 const glowDefinition: EffectDefinition = {
 	effectId: glow,
@@ -43,6 +47,12 @@ const outlineDefinition: EffectDefinition = {
 const manifest: EffectManifest = {
 	effects: [glowDefinition, outlineDefinition],
 };
+
+const run = <A, E>(effect: Effect.Effect<A, E>): Promise<A> =>
+	Effect.runPromise(effect);
+
+const failureOf = <A, E>(effect: Effect.Effect<A, E>): Promise<E> =>
+	Effect.runPromise(Effect.flip(effect));
 
 const setup = (): {
 	registry: EffectRegistry;
@@ -70,136 +80,178 @@ describe("EffectRegistry", () => {
 		expect(compiler.compiled).toEqual([]);
 	});
 
-	it("rejects an effect that was never registered", () => {
+	it("reports an effect that was never registered", async () => {
 		const { registry } = withGlow();
 
-		expect(registry.get(asEffectId("blur"), asNodeId("node-1"))).toMatchObject({
+		expect(
+			await failureOf(registry.get(asEffectId("blur"), nodeOne)),
+		).toMatchObject({
 			_tag: "EffectNotFound",
 			widgetId: village,
 			effectId: "blur",
 		});
 	});
 
-	it("compiles once per node and reuses the instance", () => {
+	it("compiles once per node and reuses the instance", async () => {
 		const { registry, compiler } = withGlow();
 
-		const first = registry.get(glow, asNodeId("node-1"));
-		const second = registry.get(glow, asNodeId("node-1"));
+		const first = await run(registry.get(glow, nodeOne));
+		const second = await run(registry.get(glow, nodeOne));
 
 		expect(compiler.compiled).toHaveLength(1);
 		expect(second).toBe(first);
 	});
 
-	it("compiles a separate instance for another node", () => {
+	it("compiles a separate instance for another node", async () => {
 		const { registry, compiler } = withGlow();
 
-		const first = registry.get(glow, asNodeId("node-1"));
-		const second = registry.get(glow, asNodeId("node-2"));
+		const first = await run(registry.get(glow, nodeOne));
+		const second = await run(registry.get(glow, nodeTwo));
 
 		expect(compiler.compiled).toHaveLength(2);
 		expect(second).not.toBe(first);
 	});
 
-	it("reports a failed compile as EffectCompileFailed", () => {
+	it("reports a failed compile as EffectCompileFailed", async () => {
 		const { registry, compiler } = withGlow();
 		compiler.failures.set(glow, new Error("shader rejected"));
 
-		expect(registry.get(glow, asNodeId("node-1"))).toBeInstanceOf(
+		expect(await failureOf(registry.get(glow, nodeOne))).toBeInstanceOf(
 			EffectCompileFailed,
 		);
 	});
 
-	it("does not retry a broken effect", () => {
+	it("does not retry a broken effect", async () => {
 		const { registry, compiler } = withGlow();
 		compiler.failures.set(glow, new Error("shader rejected"));
 
-		expect(registry.get(glow, asNodeId("node-1"))).toBeInstanceOf(
-			EffectCompileFailed,
-		);
-		expect(registry.get(glow, asNodeId("node-2"))).toBeInstanceOf(
-			EffectCompileFailed,
-		);
+		await failureOf(registry.get(glow, nodeOne));
+		await failureOf(registry.get(glow, nodeTwo));
 
 		expect(compiler.compiled).toHaveLength(1);
 	});
 
-	it("keeps a broken effect from breaking other effects", () => {
+	it("keeps a broken effect from breaking other effects", async () => {
 		const { registry, compiler } = withGlow();
 		compiler.failures.set(glow, new Error("shader rejected"));
 
-		expect(registry.get(glow, asNodeId("node-1"))).toBeInstanceOf(
-			EffectCompileFailed,
-		);
-		expect(registry.get(outline, asNodeId("node-1"))).toBeDefined();
+		await failureOf(registry.get(glow, nodeOne));
+
+		expect(await run(registry.get(outline, nodeOne))).toBeDefined();
 		expect(registry.isBroken(glow)).toBe(true);
 		expect(registry.isBroken(outline)).toBe(false);
 	});
 
-	it("accepts a param inside the bounds", () => {
+	it("accepts a param inside the bounds", async () => {
 		const { registry, compiler } = withGlow();
 
-		registry.setParam(glow, "uIntensity", 0.25);
+		await run(registry.setParam(glow, "uIntensity", 0.25));
 
 		expect(compiler.compiled).toEqual([]);
 	});
 
-	it("accepts both bounds of a param", () => {
+	it("accepts both bounds of a param", async () => {
 		const { registry } = withGlow();
 
-		registry.setParam(glow, "uIntensity", 0);
-		registry.setParam(glow, "uIntensity", 1);
+		await run(registry.setParam(glow, "uIntensity", 0));
+		await run(registry.setParam(glow, "uIntensity", 1));
 
 		expect(registry.isBroken(glow)).toBe(false);
 	});
 
-	it("rejects a param below the lower bound", () => {
+	it("rejects a param below the lower bound", async () => {
 		const { registry } = withGlow();
 
-		expect(registry.setParam(glow, "uIntensity", -0.1)).toMatchObject({
+		expect(
+			await failureOf(registry.setParam(glow, "uIntensity", -0.1)),
+		).toMatchObject({
 			_tag: "InvalidEffectParam",
 			effectId: glow,
 			param: "uIntensity",
 		});
 	});
 
-	it("rejects a param above the upper bound", () => {
+	it("rejects a param above the upper bound", async () => {
 		const { registry } = withGlow();
 
-		expect(registry.setParam(glow, "uIntensity", 2)).toBeInstanceOf(
-			InvalidEffectParam,
-		);
+		expect(
+			await failureOf(registry.setParam(glow, "uIntensity", 2)),
+		).toBeInstanceOf(InvalidEffectParam);
 	});
 
-	it("rejects a param that the effect does not declare", () => {
+	it("rejects a param that the effect does not declare", async () => {
 		const { registry } = withGlow();
 
-		expect(registry.setParam(glow, "uSpeed", 1)).toBeInstanceOf(
-			InvalidEffectParam,
-		);
+		expect(
+			await failureOf(registry.setParam(glow, "uSpeed", 1)),
+		).toBeInstanceOf(InvalidEffectParam);
 	});
 
-	it("rejects a param of an unknown effect", () => {
+	it("rejects a param of an unknown effect", async () => {
 		const { registry } = withGlow();
 
-		expect(registry.setParam(asEffectId("blur"), "uSmooth", 1)).toBeInstanceOf(
-			EffectNotFound,
-		);
+		expect(
+			await failureOf(registry.setParam(asEffectId("blur"), "uSmooth", 1)),
+		).toBeInstanceOf(EffectNotFound);
 	});
 
-	it("clears instances and broken state", () => {
+	it("destroys instances and drops broken state on clear", async () => {
 		const { registry, compiler } = withGlow();
+		await run(registry.get(glow, nodeOne));
 		compiler.failures.set(glow, new Error("shader rejected"));
-		expect(registry.get(glow, asNodeId("node-1"))).toBeInstanceOf(
-			EffectCompileFailed,
-		);
+		await failureOf(registry.get(glow, nodeTwo));
 
-		registry.clear();
+		await run(registry.clear());
 		compiler.failures.delete(glow);
-		const filter = registry.get(glow, asNodeId("node-1"));
+		const filter = await run(registry.get(glow, nodeOne));
 
 		expect(filter).toBeDefined();
 		expect(registry.isBroken(glow)).toBe(false);
-		expect(compiler.compiled).toHaveLength(2);
+		expect(compiler.compiled).toHaveLength(3);
+		expect(compiler.destroyed).toHaveLength(1);
+	});
+
+	it("replaces the definitions and destroys old instances on register", async () => {
+		const { registry, compiler } = withGlow();
+		await run(registry.get(glow, nodeOne));
+
+		registry.register({ effects: [outlineDefinition] });
+
+		expect(await failureOf(registry.get(glow, nodeOne))).toBeInstanceOf(
+			EffectNotFound,
+		);
+		expect(await run(registry.get(outline, nodeOne))).toBeDefined();
+		expect(compiler.destroyed).toHaveLength(1);
+	});
+
+	it("releases the filters of one node and keeps the others", async () => {
+		const { registry, compiler } = withGlow();
+		const first = await run(registry.get(glow, nodeOne));
+		const second = await run(registry.get(glow, nodeTwo));
+
+		await run(registry.release(nodeOne));
+
+		expect(compiler.destroyed).toEqual([first]);
+		expect(await run(registry.get(glow, nodeTwo))).toBe(second);
+		expect(await run(registry.get(glow, nodeOne))).not.toBe(first);
+	});
+
+	it("releases every effect of a node", async () => {
+		const { registry, compiler } = withGlow();
+		await run(registry.get(glow, nodeOne));
+		await run(registry.get(outline, nodeOne));
+
+		await run(registry.release(nodeOne));
+
+		expect(compiler.destroyed).toHaveLength(2);
+	});
+
+	it("treats a release of an unknown node as a no-op", async () => {
+		const { registry, compiler } = withGlow();
+
+		await run(registry.release(asNodeId("node-404")));
+
+		expect(compiler.destroyed).toEqual([]);
 	});
 
 	it("rejects a duplicate effect id in one manifest", () => {
