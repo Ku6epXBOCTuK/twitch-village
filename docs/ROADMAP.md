@@ -84,9 +84,13 @@ typescript 5.9, vitest 5.0, eslint 10.13, @assetpack/core 1.7. Линт гран
   `RenderCommand` больше не входят: это служебные сообщения своего union, и
   мёртвых веток в разборе нет. Порты возвращают `Effect`, поэтому отказ идёт в
   `E`-канал обычным `yield*`; `attemptForeign` остаётся единственной границей
-  броска синхронных модулей: `InvalidCommand`/`UnknownNode` проходят с исходным
-  тегом, чужое исключение становится `RenderFailed`. `fromPort` и ручной
-  `isRenderError` удалены.
+  броска синхронных модулей, и guard сужен до двух тегов, которые таргет реально
+  кидает (`isContractError`): `InvalidCommand`/`UnknownNode` проходят с исходным
+  тегом, чужое исключение становится `RenderFailed`. `fromPort` и общий реестр
+  тегов удалены.
+- Типы команд не размываются в рендере: `NodeKind` (`container | sprite | text`)
+  и брендированный `EffectId` идут из `protocol` в `RenderTarget`, `RenderState`
+  и обе реализации, поэтому опечатка в `kind` или `effectId` не компилируется.
 - `applyCommand` не падает: возвращает `ApplyCommandResult { errors, skipped }`,
   пачка продолжается после сбоя, 16 ошибок — потолок на пачку (`ARCHITECTURE.md`
   §4.2, §6.1). Defect сюда не относится: это ошибка разработчика.
@@ -148,6 +152,9 @@ typescript 5.9, vitest 5.0, eslint 10.13, @assetpack/core 1.7. Линт гран
 - `worker.onerror` и `messageerror` → `onFailure(WidgetCrashed)`.
 - Первое сообщение от воркера обязано быть `Ready` с `protocolVersion`;
   несовпадение → `ProtocolMismatch`, воркер терминируется.
+- Каждое входящее сообщение проходит `decodeWidgetToCore` из `@tv/protocol`
+  (строгий декод: лишние поля — ошибка). Провал декода — нарушение протокола,
+  как и несовпадение версии.
 
 Готово: тест с фейковым `Worker`.
 

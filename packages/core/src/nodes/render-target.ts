@@ -1,9 +1,9 @@
-import type { NodeId, WidgetId } from "@tv/protocol";
+import type { EffectId, NodeId, NodeKind, WidgetId } from "@tv/protocol";
 import type { Container, Filter, Texture } from "pixi.js";
 
 export interface RenderHandle {
 	readonly nodeId: NodeId;
-	readonly kind: string;
+	readonly kind: NodeKind;
 }
 
 export interface NodeTransform {
@@ -29,14 +29,14 @@ export interface AnimationState {
 }
 
 export interface FilterParamState {
-	readonly effectId: string;
+	readonly effectId: EffectId;
 	readonly param: string;
 	readonly value: number;
 }
 
 export interface NodeSnapshot {
 	nodeId: NodeId;
-	kind: string;
+	kind: NodeKind;
 	parentId: NodeId | undefined;
 	order: number;
 	transform: NodeTransform;
@@ -44,7 +44,7 @@ export interface NodeSnapshot {
 	text: string | undefined;
 	textStyle: TextStyleOptions | undefined;
 	animation: AnimationState | undefined;
-	filterIds: readonly string[];
+	filterIds: readonly EffectId[];
 	filterParams: readonly FilterParamState[];
 }
 
@@ -55,7 +55,7 @@ export interface RenderSnapshot {
 export interface RenderTarget {
 	readonly widgetId: WidgetId;
 	readonly root: Container;
-	createNode(nodeId: NodeId, kind: string): RenderHandle;
+	createNode(nodeId: NodeId, kind: NodeKind): RenderHandle;
 	removeNode(nodeId: NodeId): void;
 	setParent(nodeId: NodeId, parentId: NodeId | null, order: number): void;
 	setTransform(nodeId: NodeId, transform: NodeTransform): void;
@@ -67,11 +67,11 @@ export interface RenderTarget {
 		loop: boolean,
 	): void;
 	setText(nodeId: NodeId, text: string, style: TextStyleOptions): void;
-	addFilter(nodeId: NodeId, effectId: string, filter: Filter): void;
-	removeFilter(nodeId: NodeId, effectId: string): void;
+	addFilter(nodeId: NodeId, effectId: EffectId, filter: Filter): void;
+	removeFilter(nodeId: NodeId, effectId: EffectId): void;
 	setFilterParam(
 		nodeId: NodeId,
-		effectId: string,
+		effectId: EffectId,
 		param: string,
 		value: number,
 	): void;

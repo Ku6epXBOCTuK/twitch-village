@@ -1,5 +1,5 @@
 import type { WidgetId } from "@tv/protocol";
-import type { RenderError } from "./nodes/apply-command";
+import type { RenderError } from "./errors";
 
 export type WidgetState =
 	"loading" | "active" | "paused" | "degraded" | "crashed";

@@ -1,9 +1,12 @@
 import { Schema } from "effect";
 import { AssetId, EffectId, NodeId, WidgetId } from "./ids";
 
+export const NodeKindSchema = Schema.Literals(["container", "sprite", "text"]);
+export type NodeKind = Schema.Schema.Type<typeof NodeKindSchema>;
+
 export const CreateNode = Schema.TaggedStruct("CreateNode", {
 	nodeId: NodeId,
-	kind: Schema.Literals(["container", "sprite", "text"]),
+	kind: NodeKindSchema,
 });
 
 export const RemoveNode = Schema.TaggedStruct("RemoveNode", {

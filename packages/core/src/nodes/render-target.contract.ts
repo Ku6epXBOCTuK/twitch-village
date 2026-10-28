@@ -1,10 +1,11 @@
-import type { NodeId, WidgetId } from "@tv/protocol";
+import type { EffectId, NodeId, WidgetId } from "@tv/protocol";
 import { InvalidCommand, UnknownNode } from "@tv/protocol";
 import type { Filter } from "pixi.js";
 import { describe, expect, it } from "vitest";
 import type { RenderTarget } from "./render-target";
 
 const asNodeId = (value: string): NodeId => value as NodeId;
+const asEffectId = (value: string): EffectId => value as EffectId;
 
 const stubFilter = (): Filter => ({ uniforms: {} }) as unknown as Filter;
 
@@ -115,7 +116,7 @@ export function describeRenderTargetContract(
 
 		it("marks the node as an animation", () => {
 			const target = create(widgetId);
-			target.createNode(asNodeId("avatar:1"), "animated");
+			target.createNode(asNodeId("avatar:1"), "sprite");
 
 			target.setAnimation(asNodeId("avatar:1"), [], 12, false);
 
@@ -151,9 +152,13 @@ export function describeRenderTargetContract(
 			const target = create(widgetId);
 			target.createNode(asNodeId("avatar:1"), "sprite");
 
-			target.addFilter(asNodeId("avatar:1"), "glow", stubFilter());
-			target.addFilter(asNodeId("avatar:1"), "shadow", stubFilter());
-			target.removeFilter(asNodeId("avatar:1"), "glow");
+			target.addFilter(asNodeId("avatar:1"), asEffectId("glow"), stubFilter());
+			target.addFilter(
+				asNodeId("avatar:1"),
+				asEffectId("shadow"),
+				stubFilter(),
+			);
+			target.removeFilter(asNodeId("avatar:1"), asEffectId("glow"));
 
 			const node = target
 				.snapshot()
@@ -165,7 +170,12 @@ export function describeRenderTargetContract(
 			const target = create(widgetId);
 			target.createNode(asNodeId("avatar:1"), "sprite");
 
-			target.setFilterParam(asNodeId("avatar:1"), "glow", "intensity", 0.7);
+			target.setFilterParam(
+				asNodeId("avatar:1"),
+				asEffectId("glow"),
+				"intensity",
+				0.7,
+			);
 
 			const node = target
 				.snapshot()

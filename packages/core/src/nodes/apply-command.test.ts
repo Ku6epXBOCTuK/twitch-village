@@ -1,9 +1,11 @@
-import type {
-	AssetId,
-	EffectId,
-	NodeId,
-	RenderCommand,
-	WidgetId,
+import {
+	AssetNotFound,
+	InvalidEffectParam,
+	type AssetId,
+	type EffectId,
+	type NodeId,
+	type RenderCommand,
+	type WidgetId,
 } from "@tv/protocol";
 import { Effect } from "effect";
 import type { Filter, Texture } from "pixi.js";
@@ -14,9 +16,9 @@ import {
 	type ApplyCommandContext,
 	type ApplyCommandResult,
 	type FilterSource,
-	type RenderError,
 	type TextureSource,
 } from "./apply-command";
+import type { RenderError } from "../errors";
 import { createNodeRegistry } from "./node-registry";
 import type { RenderTarget } from "./render-target";
 
@@ -37,13 +39,13 @@ const createTextures = (): TextureSource & {
 
 	return {
 		requested,
-		getTexture(assetId: AssetId): Texture {
+		getTexture(assetId: AssetId) {
 			requested.push(assetId);
 			const cached = cache.get(assetId);
-			if (cached !== undefined) return cached;
+			if (cached !== undefined) return Effect.succeed(cached);
 			const texture = { assetId } as unknown as Texture;
 			cache.set(assetId, texture);
-			return texture;
+			return Effect.succeed(texture);
 		},
 	};
 };
@@ -66,13 +68,13 @@ const createEffects = (): FilterSource & {
 	return {
 		requested,
 		params,
-		get(effectId: EffectId, nodeId: NodeId): Filter {
+		get(effectId: EffectId, nodeId: NodeId) {
 			requested.push({ effectId, nodeId });
-			return { effectId, nodeId } as unknown as Filter;
+			return Effect.succeed({ effectId, nodeId } as unknown as Filter);
 		},
 		setParam(effectId: EffectId, param: string, value: number) {
 			params.push({ effectId, param, value });
-			return null;
+			return Effect.void;
 		},
 	};
 };
@@ -575,6 +577,95 @@ describe("applyCommand", () => {
 				}),
 			),
 		).rejects.toThrow("boom-42");
+	});
+
+	it("reports an AssetNotFound from the texture port", async () => {
+		const { ctx, calls } = setup();
+		const assetId = asAssetId("gone");
+		const missing: ApplyCommandContext = {
+			...ctx,
+			textures: {
+				getTexture: () =>
+					Effect.fail(
+						new AssetNotFound({
+							widgetId,
+							message: `Asset ${assetId} is not found`,
+							assetId,
+						}),
+					),
+			},
+		};
+
+		const error = await runError(missing, {
+			_tag: "SetSprite",
+			nodeId,
+			assetId,
+		});
+
+		expectTag(error, "AssetNotFound");
+		expect(calls()).toEqual([]);
+	});
+
+	it("Batch keeps applying after an asset miss", async () => {
+		const { ctx, calls } = setup();
+		const assetId = asAssetId("gone");
+		const missing: ApplyCommandContext = {
+			...ctx,
+			textures: {
+				getTexture: () =>
+					Effect.fail(
+						new AssetNotFound({
+							widgetId,
+							message: `Asset ${assetId} is not found`,
+							assetId,
+						}),
+					),
+			},
+		};
+
+		const { errors } = await run(missing, {
+			_tag: "Batch",
+			commands: [
+				{ _tag: "SetSprite", nodeId, assetId },
+				{ _tag: "SetTransform", nodeId, x: 2 },
+			],
+		});
+
+		expectTag(onlyError(errors), "AssetNotFound");
+		expect(calls()).toEqual([
+			{ method: "setTransform", args: [nodeId, { x: 2 }] },
+		]);
+	});
+
+	it("reports a rejected filter param and skips the uniform", async () => {
+		const { ctx, calls } = setup();
+		const effectId = asEffectId("glow");
+		const rejecting: ApplyCommandContext = {
+			...ctx,
+			effects: {
+				get: ctx.effects.get,
+				setParam: () =>
+					Effect.fail(
+						new InvalidEffectParam({
+							widgetId,
+							message: "value is outside the manifest bounds",
+							effectId,
+							param: "intensity",
+						}),
+					),
+			},
+		};
+
+		const error = await runError(rejecting, {
+			_tag: "SetFilterParam",
+			nodeId,
+			effectId,
+			param: "intensity",
+			value: 9,
+		});
+
+		expectTag(error, "InvalidEffectParam");
+		expect(calls()).toEqual([]);
 	});
 
 	it("reports a single failing command instead of failing the effect", async () => {

@@ -1,13 +1,12 @@
 import {
-	AssetNotFound,
-	EffectCompileFailed,
-	EffectNotFound,
-	InvalidCommand,
-	InvalidEffectParam,
 	RenderFailed,
 	UnknownNode,
 	type AssetId,
+	type AssetNotFound,
+	type EffectCompileFailed,
 	type EffectId,
+	type EffectNotFound,
+	type InvalidEffectParam,
 	type LeafCommand,
 	type NodeId,
 	type RenderCommand,
@@ -15,38 +14,9 @@ import {
 } from "@tv/protocol";
 import { Effect, Match } from "effect";
 import type { Filter, Texture } from "pixi.js";
+import { isContractError, type RenderError } from "../errors";
 import type { NodeRegistry } from "./node-registry";
 import type { RenderTarget } from "./render-target";
-
-export type RenderError =
-	| AssetNotFound
-	| EffectCompileFailed
-	| EffectNotFound
-	| InvalidCommand
-	| InvalidEffectParam
-	| RenderFailed
-	| UnknownNode;
-
-type RenderErrorTags = RenderError["_tag"];
-
-const RENDER_ERROR_TAGS: Record<RenderErrorTags, true> = {
-	AssetNotFound: true,
-	EffectCompileFailed: true,
-	EffectNotFound: true,
-	InvalidCommand: true,
-	InvalidEffectParam: true,
-	RenderFailed: true,
-	UnknownNode: true,
-};
-
-export const isRenderError = (error: unknown): error is RenderError => {
-	return (
-		error !== null &&
-		typeof error === "object" &&
-		"_tag" in error &&
-		Object.hasOwn(RENDER_ERROR_TAGS, (error as { _tag: RenderErrorTags })._tag)
-	);
-};
 
 function toRenderFailed(
 	ctx: ApplyCommandContext,
@@ -61,16 +31,19 @@ function toRenderFailed(
 }
 
 export interface TextureSource {
-	getTexture(assetId: AssetId): Texture | AssetNotFound;
+	getTexture(assetId: AssetId): Effect.Effect<Texture, AssetNotFound>;
 }
 
 export interface FilterSource {
-	get(effectId: EffectId, nodeId: NodeId): Filter | RenderError;
+	get(
+		effectId: EffectId,
+		nodeId: NodeId,
+	): Effect.Effect<Filter, EffectNotFound | EffectCompileFailed>;
 	setParam(
 		effectId: EffectId,
 		param: string,
 		value: number,
-	): RenderError | null;
+	): Effect.Effect<void, EffectNotFound | InvalidEffectParam>;
 }
 
 export interface ApplyCommandContext {
@@ -102,19 +75,11 @@ const applyLeaf = Effect.fnUntraced(function* (
 	ctx: ApplyCommandContext,
 	command: LeafCommand,
 ): Effect.fn.Return<void, RenderError> {
-	function fromPort<A>(
-		run: () => A | RenderError,
-	): Effect.Effect<A, RenderError> {
-		return Effect.flatMap(Effect.sync(run), (value) =>
-			isRenderError(value) ? Effect.fail(value) : Effect.succeed(value),
-		);
-	}
-
 	function attemptForeign<A>(run: () => A): Effect.Effect<A, RenderError> {
 		return Effect.try({
 			try: run,
 			catch: (error) =>
-				isRenderError(error) ? error : toRenderFailed(ctx, command, error),
+				isContractError(error) ? error : toRenderFailed(ctx, command, error),
 		});
 	}
 
@@ -154,16 +119,12 @@ const applyLeaf = Effect.fnUntraced(function* (
 		SetTransform: ({ nodeId, _tag, ...rest }) =>
 			attemptForeign(() => ctx.target.setTransform(nodeId, rest)),
 		SetSprite: ({ nodeId, assetId }) =>
-			Effect.flatMap(
-				fromPort(() => ctx.textures.getTexture(assetId)),
-				(texture) =>
-					attemptForeign(() => ctx.target.setSprite(nodeId, texture)),
+			Effect.flatMap(ctx.textures.getTexture(assetId), (texture) =>
+				attemptForeign(() => ctx.target.setSprite(nodeId, texture)),
 			),
 		SetAnimation: ({ nodeId, assetIds, fps, loop }) =>
 			Effect.flatMap(
-				Effect.forEach(assetIds, (assetId) =>
-					fromPort(() => ctx.textures.getTexture(assetId)),
-				),
+				Effect.forEach(assetIds, (assetId) => ctx.textures.getTexture(assetId)),
 				(textures) =>
 					attemptForeign(() =>
 						ctx.target.setAnimation(nodeId, textures, fps, loop),
@@ -172,20 +133,16 @@ const applyLeaf = Effect.fnUntraced(function* (
 		SetText: ({ nodeId, text, style }) =>
 			attemptForeign(() => ctx.target.setText(nodeId, text, style)),
 		AddFilter: ({ nodeId, effectId }) =>
-			Effect.flatMap(
-				fromPort(() => ctx.effects.get(effectId, nodeId)),
-				(filter) =>
-					attemptForeign(() => ctx.target.addFilter(nodeId, effectId, filter)),
+			Effect.flatMap(ctx.effects.get(effectId, nodeId), (filter) =>
+				attemptForeign(() => ctx.target.addFilter(nodeId, effectId, filter)),
 			),
 		RemoveFilter: ({ nodeId, effectId }) =>
 			attemptForeign(() => ctx.target.removeFilter(nodeId, effectId)),
 		SetFilterParam: ({ nodeId, effectId, param, value }) =>
-			Effect.flatMap(
-				fromPort(() => ctx.effects.setParam(effectId, param, value)),
-				() =>
-					attemptForeign(() =>
-						ctx.target.setFilterParam(nodeId, effectId, param, value),
-					),
+			Effect.flatMap(ctx.effects.setParam(effectId, param, value), () =>
+				attemptForeign(() =>
+					ctx.target.setFilterParam(nodeId, effectId, param, value),
+				),
 			),
 	});
 });

@@ -1,4 +1,4 @@
-import type { NodeId, WidgetId } from "@tv/protocol";
+import type { EffectId, NodeId, NodeKind, WidgetId } from "@tv/protocol";
 import { InvalidCommand, UnknownNode } from "@tv/protocol";
 import type {
 	AnimationState,
@@ -11,7 +11,7 @@ import type {
 
 interface NodeState {
 	nodeId: NodeId;
-	kind: string;
+	kind: NodeKind;
 	parentId: NodeId | undefined;
 	order: number;
 	transform: NodeTransform;
@@ -19,13 +19,13 @@ interface NodeState {
 	text: string | undefined;
 	textStyle: TextStyleOptions | undefined;
 	animation: AnimationState | undefined;
-	filterIds: string[];
+	filterIds: EffectId[];
 	filterParams: FilterParamState[];
 }
 
 export interface RenderState {
 	readonly widgetId: WidgetId;
-	createNode(nodeId: NodeId, kind: string): void;
+	createNode(nodeId: NodeId, kind: NodeKind): void;
 	removeNode(nodeId: NodeId): readonly NodeSnapshot[];
 	setParent(nodeId: NodeId, parentId: NodeId | null, order: number): void;
 	setTransform(nodeId: NodeId, transform: NodeTransform): void;
@@ -37,11 +37,11 @@ export interface RenderState {
 		frameCount: number,
 	): void;
 	setText(nodeId: NodeId, text: string, style: TextStyleOptions): void;
-	addFilter(nodeId: NodeId, effectId: string): void;
-	removeFilter(nodeId: NodeId, effectId: string): void;
+	addFilter(nodeId: NodeId, effectId: EffectId): void;
+	removeFilter(nodeId: NodeId, effectId: EffectId): void;
 	setFilterParam(
 		nodeId: NodeId,
-		effectId: string,
+		effectId: EffectId,
 		param: string,
 		value: number,
 	): void;

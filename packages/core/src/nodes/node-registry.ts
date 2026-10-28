@@ -2,6 +2,7 @@ import {
 	InvalidCommand,
 	UnknownNode,
 	type NodeId,
+	type NodeKind,
 	type WidgetId,
 } from "@tv/protocol";
 import type {
@@ -16,7 +17,7 @@ export interface NodeRegistryOptions {
 }
 
 export interface NodeRegistry {
-	create(nodeId: NodeId, kind: string): RenderHandle;
+	create(nodeId: NodeId, kind: NodeKind): RenderHandle;
 	get(nodeId: NodeId): RenderHandle;
 	has(nodeId: NodeId): boolean;
 	remove(nodeId: NodeId): void;
@@ -95,7 +96,7 @@ export function createNodeRegistry(options: NodeRegistryOptions): NodeRegistry {
 	}
 
 	const registry: NodeRegistry = {
-		create: (nodeId: NodeId, kind: string): RenderHandle => {
+		create: (nodeId: NodeId, kind: NodeKind): RenderHandle => {
 			if (nodes.has(nodeId)) {
 				throw new InvalidCommand({
 					widgetId,

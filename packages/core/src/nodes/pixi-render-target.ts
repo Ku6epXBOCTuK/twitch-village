@@ -1,4 +1,9 @@
-import { InvalidCommand, type NodeId, type WidgetId } from "@tv/protocol";
+import {
+	InvalidCommand,
+	type EffectId,
+	type NodeId,
+	type WidgetId,
+} from "@tv/protocol";
 import type { Filter, Texture } from "pixi.js";
 import { AnimatedSprite, Container, Sprite, Text } from "pixi.js";
 import { createRenderState } from "./render-state";
@@ -21,7 +26,7 @@ export function createPixiRenderTarget(
 	const views = new Map<NodeId, Container>();
 	const handles = new Map<NodeId, RenderHandle>();
 	const contents = new Map<NodeId, Container>();
-	const filters = new Map<NodeId, Map<string, Filter>>();
+	const filters = new Map<NodeId, Map<EffectId, Filter>>();
 
 	const requireView = (nodeId: NodeId): Container => {
 		const view = views.get(nodeId);
@@ -103,9 +108,7 @@ export function createPixiRenderTarget(
 		setSprite(nodeId, texture: Texture) {
 			state.setSprite(nodeId);
 			const sprite = new Sprite();
-			if (texture !== undefined) {
-				sprite.texture = texture;
-			}
+			sprite.texture = texture;
 			setContent(nodeId, sprite);
 		},
 		setAnimation(nodeId, textures, fps, loop) {
@@ -141,10 +144,8 @@ export function createPixiRenderTarget(
 		},
 		addFilter(nodeId, effectId, filter: Filter) {
 			state.addFilter(nodeId, effectId);
-			const nodeFilters = filters.get(nodeId) ?? new Map<string, Filter>();
-			if (filter !== undefined) {
-				nodeFilters.set(effectId, filter);
-			}
+			const nodeFilters = filters.get(nodeId) ?? new Map<EffectId, Filter>();
+			nodeFilters.set(effectId, filter);
 			filters.set(nodeId, nodeFilters);
 			applyFilters(nodeId);
 		},

@@ -1,4 +1,4 @@
-import type { NodeId, WidgetId } from "@tv/protocol";
+import type { EffectId, NodeId, NodeKind, WidgetId } from "@tv/protocol";
 import type { Container, Filter, Texture } from "pixi.js";
 import type {
 	RenderHandle,
@@ -34,7 +34,7 @@ export function createFakeRenderTarget(
 		widgetId: options.widgetId,
 		root: {} as Container,
 		calls,
-		createNode(nodeId: NodeId, kind: string): RenderHandle {
+		createNode(nodeId: NodeId, kind: NodeKind): RenderHandle {
 			record("createNode", [nodeId, kind]);
 			state.createNode(nodeId, kind);
 			return { nodeId, kind };
@@ -63,11 +63,11 @@ export function createFakeRenderTarget(
 			record("setText", [nodeId, text, style]);
 			state.setText(nodeId, text, style);
 		},
-		addFilter(nodeId: NodeId, effectId: string, filter: Filter): void {
+		addFilter(nodeId: NodeId, effectId: EffectId, filter: Filter): void {
 			record("addFilter", [nodeId, effectId, filter]);
 			state.addFilter(nodeId, effectId);
 		},
-		removeFilter(nodeId: NodeId, effectId: string): void {
+		removeFilter(nodeId: NodeId, effectId: EffectId): void {
 			record("removeFilter", [nodeId, effectId]);
 			state.removeFilter(nodeId, effectId);
 		},
