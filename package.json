@@ -9,7 +9,8 @@
 		"dev": "turbo dev",
 		"typecheck": "turbo typecheck",
 		"test": "turbo test",
-		"test:watch": "turbo test:watch",
+		"test:watch": "pnpm -F @tv/core test:watch",
+		"test:watch:protocol": "pnpm -F @tv/protocol test:watch",
 		"lint": "turbo lint",
 		"assets": "turbo assets",
 		"format": "prettier --write . --log-level=warn"

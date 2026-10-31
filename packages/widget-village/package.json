@@ -11,8 +11,8 @@
 	},
 	"scripts": {
 		"typecheck": "tsc --noEmit -p tsconfig.json",
-		"test": "vitest run --passWithNoTests",
-		"test:watch": "vitest watch --passWithNoTests",
+		"test": "vitest run --reporter=../../tools/vitest-failures-first.ts --passWithNoTests",
+		"test:watch": "vitest watch --reporter=../../tools/vitest-failures-first.ts --passWithNoTests",
 		"lint": "eslint src",
 		"assets": "assetpack"
 	},
