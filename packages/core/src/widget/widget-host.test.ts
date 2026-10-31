@@ -44,6 +44,11 @@ const readyEnvelope = {
 	},
 };
 
+const serviceEnvelope = (tag: "Heartbeat" | "Pause" | "Resume") => ({
+	protocolVersion: PROTOCOL_VERSION,
+	message: tag === "Heartbeat" ? { _tag: tag, tick: 1 } : { _tag: tag },
+});
+
 interface PostedEnvelope {
 	readonly protocolVersion: number;
 	readonly message: { readonly _tag: string } & Record<string, unknown>;
@@ -75,6 +80,7 @@ const setup = async (
 
 	const worker = createFakeWorker();
 	let workerCreations = 0;
+	let now = 0;
 	const descriptor: WidgetDescriptor = {
 		id: widgetId,
 		workerUrl: new URL("http://localhost/village.js"),
@@ -85,7 +91,7 @@ const setup = async (
 
 	const layer = Layer.mergeAll(
 		Layer.succeed(Assets, { create: () => registry }),
-		Layer.succeed(Clock, { now: () => 0 }),
+		Layer.succeed(Clock, { now: () => now }),
 		Layer.succeed(Effects, compiler),
 		Layer.succeed(Manifests, manifests),
 		Layer.succeed(RenderTargets, { create: () => target }),
@@ -125,6 +131,10 @@ const setup = async (
 		workerCreations: () => workerCreations,
 		host,
 		postedOf,
+		advance: (ms: number) => {
+			now += ms;
+		},
+		now: () => now,
 	};
 };
 
@@ -593,5 +603,123 @@ describe("WidgetHost", () => {
 				message: { _tag: "Viewport", w: 1600, h: 900 },
 			},
 		]);
+	});
+
+	it("stays active while heartbeats arrive within the timeout", async () => {
+		const { worker, host, advance } = await setup();
+		await Effect.runPromise(host.start());
+
+		advance(1000);
+		worker.emitMessage(serviceEnvelope("Heartbeat"));
+		advance(1000);
+		worker.emitMessage(serviceEnvelope("Heartbeat"));
+		host.ensureAlive();
+
+		expect(host.status().state).toBe("active");
+	});
+
+	it("crashes and terminates the worker when heartbeats stop", async () => {
+		const { worker, host, advance } = await setup();
+		await Effect.runPromise(host.start());
+
+		advance(2001);
+		host.ensureAlive();
+
+		expect(host.status().state).toBe("crashed");
+		expect(worker.terminated).toBe(true);
+		expect(host.status().lastError?.tag).toBe("WidgetTimeout");
+	});
+
+	it("does not repeat Pause and Resume envelopes", async () => {
+		const { host, postedOf } = await setup();
+		await Effect.runPromise(host.start());
+
+		host.pause();
+		host.pause();
+		expect(postedOf("Pause")).toHaveLength(1);
+
+		host.resume();
+		host.resume();
+		expect(postedOf("Resume")).toHaveLength(1);
+	});
+
+	it("counts every heartbeat", async () => {
+		const { worker, host } = await setup();
+		await Effect.runPromise(host.start());
+
+		worker.emitMessage(serviceEnvelope("Heartbeat"));
+		worker.emitMessage(serviceEnvelope("Heartbeat"));
+
+		expect(host.status().counters.heartbeat).toBe(2);
+	});
+
+	it("pauses the watchdog on Pause and resumes it on Resume", async () => {
+		const { host, advance, postedOf } = await setup();
+		await Effect.runPromise(host.start());
+
+		host.pause();
+		expect(postedOf("Pause")).toHaveLength(1);
+		advance(60_000);
+		host.ensureAlive();
+		expect(host.status().state).toBe("paused");
+
+		host.resume();
+		expect(postedOf("Resume")).toHaveLength(1);
+		advance(2000);
+		host.ensureAlive();
+		expect(host.status().state).toBe("active");
+
+		advance(1);
+		host.ensureAlive();
+		expect(host.status().state).toBe("crashed");
+	});
+
+	it("does not pause or crash a widget that is not active", async () => {
+		const { host, advance, postedOf } = await setup();
+
+		host.pause();
+		expect(host.status().state).toBe("loading");
+		expect(postedOf("Pause")).toHaveLength(0);
+
+		host.resume();
+		expect(host.status().state).toBe("loading");
+		expect(postedOf("Resume")).toHaveLength(0);
+
+		advance(60_000);
+		host.ensureAlive();
+		expect(host.status().state).toBe("loading");
+		expect(host.status().lastError).toBeNull();
+	});
+
+	it("stops watching the widget after stop", async () => {
+		const { host, advance } = await setup();
+		await Effect.runPromise(host.start());
+		await Effect.runPromise(host.stop());
+
+		advance(60_000);
+		host.ensureAlive();
+
+		expect(host.status().state).toBe("loading");
+		expect(host.status().lastError).toBeNull();
+	});
+
+	it("gives the restarted widget a fresh watchdog", async () => {
+		const { host, advance } = await setup();
+		await Effect.runPromise(host.start());
+		advance(2001);
+		host.ensureAlive();
+		expect(host.status().state).toBe("crashed");
+
+		await Effect.runPromise(host.start());
+		host.ensureAlive();
+		expect(host.status().state).toBe("active");
+
+		advance(2000);
+		host.ensureAlive();
+		expect(host.status().state).toBe("active");
+
+		advance(1);
+		host.ensureAlive();
+		expect(host.status().state).toBe("crashed");
 	});
 });

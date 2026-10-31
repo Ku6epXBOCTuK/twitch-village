@@ -4,11 +4,19 @@ import type { RenderError } from "./errors";
 export type WidgetState =
 	"loading" | "active" | "paused" | "degraded" | "crashed";
 
-export type ErrorCounterName = RenderError["_tag"];
+export type LifecycleErrorName =
+	| "BundleLoadFailed"
+	| "BundleUnloadFailed"
+	| "ManifestLoadFailed"
+	| "ProtocolMismatch"
+	| "WidgetCrashed"
+	| "WidgetTimeout";
+
+export type ErrorCounterName = RenderError["_tag"] | LifecycleErrorName;
 export type CounterName = "heartbeat" | "dropped" | "skipped";
 
 export interface WidgetErrorInfo {
-	readonly tag: RenderError["_tag"];
+	readonly tag: ErrorCounterName;
 	readonly message: string;
 	readonly at: number;
 }
@@ -35,7 +43,10 @@ export interface StatusStore {
 	get(widgetId: WidgetId): WidgetStatus | undefined;
 	setState(widgetId: WidgetId, state: WidgetState): void;
 	count(widgetId: WidgetId, name: CounterName, by?: number): void;
-	recordError(widgetId: WidgetId, error: RenderError): void;
+	recordError(
+		widgetId: WidgetId,
+		error: { readonly _tag: ErrorCounterName; readonly message: string },
+	): void;
 	flush(widgetId: WidgetId): void;
 	subscribe(listener: (status: WidgetStatus) => void): () => void;
 	reset(widgetId: WidgetId): void;
@@ -51,6 +62,12 @@ function emptyCounters(): Record<CounterName | ErrorCounterName, number> {
 		InvalidEffectParam: 0,
 		RenderFailed: 0,
 		UnknownNode: 0,
+		BundleLoadFailed: 0,
+		BundleUnloadFailed: 0,
+		ManifestLoadFailed: 0,
+		ProtocolMismatch: 0,
+		WidgetCrashed: 0,
+		WidgetTimeout: 0,
 		heartbeat: 0,
 		dropped: 0,
 		skipped: 0,

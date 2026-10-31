@@ -13,7 +13,7 @@ import { Deferred, Effect, Exit, Match } from "effect";
 import { createEffectRegistry } from "../effects/effect-registry";
 import {
 	Assets,
-	type Clock,
+	Clock,
 	Effects,
 	Manifests,
 	RenderTargets,
@@ -24,6 +24,7 @@ import {
 import { type CommandBus, createCommandBus } from "../queue/command-bus";
 import type { WidgetStatus } from "../status";
 import type { Viewport } from "../viewport";
+import { createWatchdog } from "./watchdog";
 import {
 	createWorkerTransport,
 	type WorkerTransport,
@@ -68,6 +69,9 @@ export interface WidgetHost {
 	stop(): Effect.Effect<void>;
 	onCoreEvent(event: ViewerEvent): void;
 	setViewport(viewport: Viewport): void;
+	pause(): void;
+	resume(): void;
+	ensureAlive(): void;
 	status(): WidgetStatus;
 }
 
@@ -95,6 +99,24 @@ function createInitEvent(
 				w: viewport.width,
 				h: viewport.height,
 			},
+		},
+	};
+}
+
+function createPauseEvent(): CoreToWidget {
+	return {
+		protocolVersion: PROTOCOL_VERSION,
+		message: {
+			_tag: "Pause",
+		},
+	};
+}
+
+function createResumeEvent(): CoreToWidget {
+	return {
+		protocolVersion: PROTOCOL_VERSION,
+		message: {
+			_tag: "Resume",
 		},
 	};
 }
@@ -131,22 +153,23 @@ export function createWidgetHost(
 		const viewportSource = yield* Viewports;
 		const workerFactory = yield* Workers;
 		const manifestLoader = yield* Manifests;
+		const clock = yield* Clock;
 
+		const watchdog = createWatchdog();
 		const id = descriptor.id;
-
 		const assetRegistry = assets.create(id);
 		const effectRegistry = createEffectRegistry({
 			widgetId: id,
 			compiler,
 		});
 		const target = renderTargets.create(id);
+
 		const pendingEvents: ViewerEvent[] = [];
 		let lastViewport: Viewport | null = null;
-
-		let reportedDropped: number = 0;
+		let reportedDropped = 0;
 		let workerTransport: WorkerTransport | null = null;
 		let starting: Deferred.Deferred<void, WidgetError> | null = null;
-		let active: boolean = false;
+		let widgetIsAttached = false;
 
 		statusStore.register(id);
 
@@ -162,7 +185,7 @@ export function createWidgetHost(
 		});
 
 		function transportToSend(): WorkerTransport | null {
-			return active ? workerTransport : null;
+			return widgetIsAttached ? workerTransport : null;
 		}
 
 		function sendToWorker(message: ViewerEvent) {
@@ -187,7 +210,7 @@ export function createWidgetHost(
 		}
 
 		function reset() {
-			active = false;
+			widgetIsAttached = false;
 			lastViewport = null;
 			pendingEvents.length = 0;
 			disposeTransport();
@@ -273,6 +296,10 @@ export function createWidgetHost(
 								Match.tag("Batch", ({ commands }) => {
 									commandBus.push(id, commands);
 								}),
+								Match.tag("Heartbeat", () => {
+									statusStore.count(id, "heartbeat");
+									watchdog.beat(clock.now());
+								}),
 							);
 						});
 
@@ -298,8 +325,9 @@ export function createWidgetHost(
 						if (workerTransport === null) {
 							return;
 						}
+						watchdog.reset(clock.now());
 						statusStore.setState(id, "active");
-						active = true;
+						widgetIsAttached = true;
 						if (lastViewport !== null) {
 							const transport = transportToSend();
 							if (transport !== null) {
@@ -340,6 +368,39 @@ export function createWidgetHost(
 				} else {
 					lastViewport = viewport;
 				}
+			},
+			pause: () => {
+				if (widgetIsAttached && !watchdog.paused) {
+					watchdog.pause();
+					statusStore.setState(id, "paused");
+					const transport = transportToSend();
+					if (transport !== null) {
+						transport.transport.send(createPauseEvent());
+					}
+				}
+			},
+			resume: () => {
+				if (widgetIsAttached && watchdog.paused) {
+					watchdog.resume(clock.now());
+					statusStore.setState(id, "active");
+					const transport = transportToSend();
+					if (transport !== null) {
+						transport.transport.send(createResumeEvent());
+					}
+				}
+			},
+			ensureAlive: () => {
+				if (!widgetIsAttached) return;
+				if (!watchdog.overdue(clock.now())) return;
+
+				statusStore.recordError(
+					id,
+					new WidgetTimeout({
+						widgetId: id,
+						message: "Widget watchdog timeout",
+					}),
+				);
+				markFailed();
 			},
 			status: () => {
 				const status = statusStore.get(id);

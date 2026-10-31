@@ -35,6 +35,12 @@ export type {
 	WidgetState,
 	WidgetStatus,
 } from "./status";
+export {
+	HEARTBEAT_INTERVAL_MS,
+	HEARTBEAT_TIMEOUT_MS,
+	createWatchdog,
+} from "./widget/watchdog";
+export type { Watchdog, WatchdogOptions } from "./widget/watchdog";
 export { createWidgetHost } from "./widget/widget-host";
 export type {
 	WidgetDescriptor,
