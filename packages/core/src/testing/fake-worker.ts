@@ -3,6 +3,7 @@ import type { WorkerPort } from "../widget/worker-transport";
 export interface FakeWorker extends WorkerPort {
 	readonly posted: readonly unknown[];
 	readonly terminated: boolean;
+	onPost: ((message: unknown) => void) | null;
 	emitMessage(data: unknown): void;
 	emitError(message: string): void;
 	emitMessageError(): void;
@@ -20,8 +21,10 @@ export function createFakeWorker(): FakeWorker {
 		onmessage: null,
 		onerror: null,
 		onmessageerror: null,
+		onPost: null,
 		postMessage(message: unknown): void {
 			posted.push(message);
+			worker.onPost?.(message);
 		},
 		terminate(): void {
 			terminated = true;

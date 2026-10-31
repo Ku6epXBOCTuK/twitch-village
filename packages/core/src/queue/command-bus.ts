@@ -84,14 +84,14 @@ export function createCommandBus(config: CommandBusConfig): CommandBus {
 				const incoming = commands.length;
 				const total = queued + incoming;
 
+				state.dropped += commands.length + current;
+				state.commands.length = 0;
 				config.onOverflow?.(
 					new QueueOverflow({
 						widgetId,
 						message: `Queue overflow: was queued ${queued}, new incoming ${incoming}, total dropped ${total}`,
 					}),
 				);
-				state.dropped += commands.length + current;
-				state.commands.length = 0;
 			} else {
 				state.commands.push(...commands);
 			}

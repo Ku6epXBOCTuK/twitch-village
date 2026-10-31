@@ -79,3 +79,9 @@ export class BundleUnloadFailed extends Data.TaggedError("BundleUnloadFailed")<{
 	message: string;
 	bundleId: string;
 }> {}
+
+export class ManifestLoadFailed extends Data.TaggedError("ManifestLoadFailed")<{
+	widgetId: WidgetId;
+	message: string;
+	url: string;
+}> {}
