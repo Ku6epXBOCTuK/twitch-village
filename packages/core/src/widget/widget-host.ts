@@ -22,6 +22,7 @@ import {
 	Viewports,
 	Workers,
 } from "../live";
+import type { WidgetFrame } from "../loop/ticker";
 import { type CommandBus, createCommandBus } from "../queue/command-bus";
 import type { WidgetStatus } from "../status";
 import type { Viewport } from "../viewport";
@@ -74,6 +75,7 @@ export interface WidgetHost {
 	pause(): void;
 	resume(): void;
 	ensureAlive(): void;
+	frame(): WidgetFrame;
 	status(): WidgetStatus;
 }
 
@@ -240,6 +242,20 @@ export function createWidgetHost(
 			.unloadBundle(descriptor.assetBundle)
 			.pipe(Effect.ignore());
 
+		const ensureAlive = () => {
+			if (!widgetIsAttached) return;
+			if (!watchdog.overdue(clock.now())) return;
+
+			statusStore.recordError(
+				id,
+				new WidgetTimeout({
+					widgetId: id,
+					message: "Widget watchdog timeout",
+				}),
+			);
+			markFailed();
+		};
+
 		return {
 			widgetId: id,
 			bus: commandBus,
@@ -392,19 +408,18 @@ export function createWidgetHost(
 					}
 				}
 			},
-			ensureAlive: () => {
-				if (!widgetIsAttached) return;
-				if (!watchdog.overdue(clock.now())) return;
-
-				statusStore.recordError(
-					id,
-					new WidgetTimeout({
-						widgetId: id,
-						message: "Widget watchdog timeout",
-					}),
-				);
-				markFailed();
-			},
+			ensureAlive,
+			frame: () => ({
+				widgetId: id,
+				bus: commandBus,
+				context: {
+					widgetId: id,
+					target,
+					textures: assetRegistry,
+					effects: effectRegistry,
+				},
+				ensureAlive,
+			}),
 			status: () => {
 				const status = statusStore.get(id);
 				if (status === undefined) {

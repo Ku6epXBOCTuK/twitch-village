@@ -45,6 +45,7 @@ export interface StatusStoreOptions {
 export interface StatusStore {
 	register(widgetId: WidgetId): void;
 	get(widgetId: WidgetId): WidgetStatus | undefined;
+	has(widgetId: WidgetId): boolean;
 	setState(widgetId: WidgetId, state: WidgetState): void;
 	count(widgetId: WidgetId, name: CounterName, by?: number): void;
 	recordError(
@@ -120,6 +121,9 @@ export function createStatusStore(options: StatusStoreOptions): StatusStore {
 		get(widgetId) {
 			const status = statuses.get(widgetId);
 			return status === undefined ? undefined : toStatus(widgetId, status);
+		},
+		has(widgetId) {
+			return statuses.has(widgetId);
 		},
 		setState(widgetId, state) {
 			const status = mutableOf(widgetId);

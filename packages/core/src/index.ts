@@ -54,3 +54,16 @@ export type {
 	SceneManager,
 	SceneManagerServices,
 } from "./scene/scene-manager";
+export { createEffectAdapter } from "./effect-adapter";
+export type {
+	EffectAdapter,
+	EffectAdapterOptions,
+	SyncRuntime,
+} from "./effect-adapter";
+export { createTicker, runFrame } from "./loop/ticker";
+export type {
+	FrameSource,
+	Ticker,
+	TickerOptions,
+	WidgetFrame,
+} from "./loop/ticker";

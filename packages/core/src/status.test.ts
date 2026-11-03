@@ -215,6 +215,18 @@ describe("StatusStore", () => {
 		expect(() => store.flush(widgetId)).not.toThrow();
 	});
 
+	it("tells whether a widget is registered without building its status", () => {
+		const store = createStatusStore({});
+
+		expect(store.has(widgetId)).toBe(false);
+
+		store.register(widgetId);
+		expect(store.has(widgetId)).toBe(true);
+
+		store.remove(widgetId);
+		expect(store.has(widgetId)).toBe(false);
+	});
+
 	it("rejects a duplicate registration", () => {
 		const store = createStatusStore({});
 
