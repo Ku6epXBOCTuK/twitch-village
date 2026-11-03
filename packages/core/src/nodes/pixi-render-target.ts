@@ -157,7 +157,8 @@ export function createPixiRenderTarget(
 			state.setFilterParam(nodeId, effectId, param, value);
 			const uniforms = (
 				filters.get(nodeId)?.get(effectId) as
-					{ uniforms?: Record<string, unknown> } | undefined
+					| { uniforms?: Record<string, unknown> }
+					| undefined
 			)?.uniforms;
 			if (uniforms) {
 				uniforms[param] = value;

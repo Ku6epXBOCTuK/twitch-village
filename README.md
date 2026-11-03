@@ -36,7 +36,8 @@ pnpm test               # turbo test, без браузера и GPU
 pnpm test:watch
 pnpm dev                # apps/overlay на Vite
 pnpm assets             # сборка атласов @assetpack/core, до фазы 4 падает
-pnpm format             # prettier --write по репозиторию
+pnpm format             # biome format --write по репозиторию
+pnpm format:check       # проверка форматирования без записи
 ```
 
 Корневой `pnpm test` идёт с `--passWithNoTests`: пустые пакеты не должны валить
@@ -69,6 +70,7 @@ docs/                   архитектура, план, журнал реше�
 | `vite`              | 8.x     |
 | `typescript`        | 5.9.x   |
 | `vitest`            | 5.0.x   |
+| `@biomejs/biome`    | 2.6.x   |
 | `eslint`            | 10.13.x |
 | `typescript-eslint` | 8.71.x  |
 | `turbo`             | 2.11.x  |
@@ -86,8 +88,7 @@ docs/                   архитектура, план, журнал реше�
 - **Настройки pnpm — в `pnpm-workspace.yaml`,** не в поле `pnpm` у
   `package.json`: pnpm 12 его игнорирует. Там же `allowBuilds`: `sharp: true`,
   `cpu-features: false` (`cpu-features` не собирается на Windows + Python 3).
-- **`pnpm assets` падает до появления `.assetpack.js`** — это ожидаемо до
-  фазы 4.
+- **`pnpm assets` падает до появления `.assetpack.js`** — это ожидаемо до фазы 4.
 - **Тест, которому нужен реальный GPU, воркер или OBS,** допустим только как
   ручной смоук. Контракт рендер-цели гоняется на двух реализациях
   (`pixi-render-target` и `fake-render-target`), поэтому ядро проверяется без

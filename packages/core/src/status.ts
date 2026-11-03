@@ -2,7 +2,11 @@ import type { WidgetId } from "@tv/protocol";
 import type { RenderError } from "./errors";
 
 export type WidgetState =
-	"loading" | "active" | "paused" | "degraded" | "crashed";
+	| "loading"
+	| "active"
+	| "paused"
+	| "degraded"
+	| "crashed";
 
 export type LifecycleErrorName =
 	| "BundleLoadFailed"
