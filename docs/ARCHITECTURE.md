@@ -400,28 +400,59 @@ debug-панели), без автоциклов в v1.
 ### 5.7. SceneManager
 
 ```ts
-interface WidgetDescriptor {
-  id: WidgetId;
-  workerUrl: URL;
-  assetBundle: string;
-  effectsManifest?: URL;
-  config?: unknown;
-}
-
 interface SceneManager {
-  activate(descriptor: WidgetDescriptor): Effect.Effect<void, WidgetError>;
+  activate(
+    descriptor: WidgetDescriptor,
+    options?: { restart?: boolean },
+  ): Effect.Effect<void, WidgetError>;
   deactivate(widgetId: WidgetId): Effect.Effect<void>;
   status(widgetId: WidgetId): WidgetStatus | undefined;
+  list(): readonly WidgetId[];
+  frames(): readonly WidgetFrame[];
 }
 ```
 
-Активация идемпотентна (повторная — no-op или перезапуск по флагу), деактивация
-освобождает бандл и воркер. Её отказ (`BundleUnloadFailed`) не попадает в
-`E`-канал: виджет уже снимается, ошибка уходит в статус, а не оставляет
-вызывающего с полуразобранным состоянием. Внутри `activate` — `Effect` со
-`Scope` и таймаутом; наружу приложение выполняет его через `ManagedRuntime`,
-полученный из `live.ts` (§9.1). Порядок узлов в `stage` задаётся `zIndex`
-корневых контейнеров.
+Активация идемпотентна: повторный вызов без `restart` ничего не делает, вызов во
+время уже идущей активации ждёт её результата через общий `Deferred` — второй
+вызывающий получает тот же отказ, а не тихий успех. `restart` снимает виджет и
+активирует заново; новый контейнер встаёт выше остававшихся, `zIndex` растёт по
+порядку активации. Незавершённая активация отменяется `deactivate`: токен отмены
+— волокно активации, оно прерывается, а снятие виджета всё равно проходит через
+`host.stop()`, потому что прерывание не выполняет `onError`. Провал активации
+(`BundleLoadFailed`, `ManifestLoadFailed`, `ProtocolMismatch`, `WidgetTimeout`,
+`WidgetCrashed`) не оставляет ни контейнера на сцене, ни записи в `StatusStore`:
+повторная активация возможна.
+
+Деактивация идемпотентна, неизвестный виджет — no-op. Её отказ
+(`BundleUnloadFailed`) не попадает в `E`-канал: виджет уже снимается, ошибка
+уходит в статус. Наружу приложение выполняет `activate`/`deactivate` через
+`ManagedRuntime` из `live.ts` (§9.1).
+
+### 5.8. Кадр и мост в Effect
+
+Кадр — одна Effect-программа `runFrame(source)`, объявленная через
+`Effect.fnUntraced`; `source.frames()` даёт снимок живых виджетов один раз за
+кадр. По каждому виджету: `has(widgetId)` в `StatusStore` (дешёвая проверка, не
+собирающая копию статуса) → `drain` → `applyCommand` по каждой записи → ошибки в
+`recordError`, `skipped` дельтой в `count` → `commit(widgetId, commands.length)`
+→ `ensureAlive()`.
+
+- Порядок именно такой: `commit` до `ensureAlive`, потому что сработавший
+  watchdog зовёт `markFailed`, а тот очищает шину — учёт применённого не должен
+  от него зависеть.
+- `applied` считается записями очереди, как и `queued`: пропуски внутри `Batch`
+  живут в `skipped`, а не в `processed`.
+- Ошибки — значения: кадр обрабатывает `ApplyCommandResult` и не ловит
+  исключения, поэтому сбой одного виджета не отменяет остальные.
+- Горячий путь идёт циклом, а не `Effect.forEach`: кадр не должен аллоцировать
+  на элемент.
+- `createEffectAdapter({runtime, program, onError})` — единственное место с
+  `runSync`; исключение или отказ кадра уходит в `onError` и не всплывает в
+  `app.ticker`. `createTicker` только подписывает и отписывает обработчик от
+  `app.ticker`; адаптером владеет сборка приложения — она его создаёт и гасит, а
+  `stop` оставляет пригодным для повторного `start`.
+- Подписчики статуса во время кадра не уведомляются: счётчики копятся до
+  `flush`.
 
 ---
 

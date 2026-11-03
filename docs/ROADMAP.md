@@ -52,70 +52,35 @@
 
 ## Фаза 2. Render Core
 
-**Статус: в работе. Закрыты шаги 17-27, дальше шаг 28.**
+**Статус: фаза закрыта.** Закрыты шаги 17-30.
 
 Закрытые шаги. Что получилось — `ARCHITECTURE.md`, почему так, а не иначе —
 `DECISIONS.md`:
 
-| Шаг | Итог                                                                                    | Задача | Решение    |
-| --- | --------------------------------------------------------------------------------------- | ------ | ---------- |
-| 17  | бутстрап Pixi, `createPixiApp`                                                          | TV-12  | —          |
-| 18  | `RenderTarget` и общий контракт на двух реализациях, без GPU                            | TV-13  | —          |
-| 19  | `NodeRegistry` заведён и позже убран: индекс узлов один, в `RenderState`                | TV-14  | D-07       |
-| 20  | `applyCommand`: `Match` по всем вариантам, `ApplyCommandResult`, 16 ошибок — потолок    | TV-15  | D-08, D-12 |
-| 21  | `CommandBus`: FIFO на виджет, лимиты на кадр, `QueueOverflow` через `onOverflow`        | TV-16  | D-09       |
-| 22  | `AssetRegistry`: бандлы, дедупликация загрузок, `AssetBackend` за Promise-границей      | TV-17  | D-06, D-10 |
-| 23  | `EffectRegistry`: ленивая компиляция, кэш `(effectId, nodeId)`, `register` меняет набор | TV-18  | D-06, D-11 |
-| 24  | `WidgetStatus` и `StatusStore` с уведомлением подписчиков раз в кадр                    | TV-19  | —          |
-| 25  | `WorkerTransport`: `Ready` до открытия, строгий декод, `ProtocolMismatch`, `terminate`  | TV-20  | —          |
-| 26  | `WidgetHost`: жизненный цикл от бандла до `active`, очередь, `dropped`, очистка сцены   | TV-21  | D-15       |
-| 27  | `Watchdog`: отсчёт от активации, `ensureAlive` в тикере, пауза, счётчик `heartbeat`     | TV-22  | —          |
+| Шаг | Итог                                                                                        | Задача | Решение    |
+| --- | ------------------------------------------------------------------------------------------- | ------ | ---------- |
+| 17  | бутстрап Pixi, `createPixiApp`                                                              | TV-12  | —          |
+| 18  | `RenderTarget` и общий контракт на двух реализациях, без GPU                                | TV-13  | —          |
+| 19  | `NodeRegistry` заведён и позже убран: индекс узлов один, в `RenderState`                    | TV-14  | D-07       |
+| 20  | `applyCommand`: `Match` по всем вариантам, `ApplyCommandResult`, 16 ошибок — потолок        | TV-15  | D-08, D-12 |
+| 21  | `CommandBus`: FIFO на виджет, лимиты на кадр, `QueueOverflow` через `onOverflow`            | TV-16  | D-09       |
+| 22  | `AssetRegistry`: бандлы, дедупликация загрузок, `AssetBackend` за Promise-границей          | TV-17  | D-06, D-10 |
+| 23  | `EffectRegistry`: ленивая компиляция, кэш `(effectId, nodeId)`, `register` меняет набор     | TV-18  | D-06, D-11 |
+| 24  | `WidgetStatus` и `StatusStore` с уведомлением подписчиков раз в кадр                        | TV-19  | —          |
+| 25  | `WorkerTransport`: `Ready` до открытия, строгий декод, `ProtocolMismatch`, `terminate`      | TV-20  | —          |
+| 26  | `WidgetHost`: жизненный цикл от бандла до `active`, очередь, `dropped`, очистка сцены       | TV-21  | D-15       |
+| 27  | `Watchdog`: отсчёт от активации, `ensureAlive` в тикере, пауза, счётчик `heartbeat`         | TV-22  | —          |
+| 28  | `SceneManager`: активация в сцену, `zIndex`, `restart`, отмена незавершённой активации      | TV-23  | D-16       |
+| 29  | Кадр: `runFrame` в `Effect.fnUntraced`, адаптер `runSync`, счётчики `skipped`/`processed`   | TV-24  | D-17       |
+| 30  | Чекпоинт: контракт рендер-цели на двух реализациях, сквозной тест «очередь → кадр → таргет» | TV-25  | —          |
 
 Доработки после этих шагов: TV-26 (пачка не обрывается на первой ошибке), TV-33
 (правило `throw`), TV-34 (порты отдают значения вместо броска), TV-30 и TV-31
-(типизированные ошибки и чистка рендер-цели), TV-36 (`stop` во время `start`).
+(типизированные ошибки и чистка рендер-цели).
 
-### Шаг 28. SceneManager
-
-Файл: `packages/core/src/scene/scene-manager.ts`.
-
-- `activate(descriptor)`, `deactivate(widgetId)`, `status()`, `list()`.
-- Корневой контейнер на виджет (`stage.addChild`), `zIndex` по порядку
-  активации; повторная активация без `restart` — no-op.
-- Публичный API Core (`packages/core/src/index.ts`) — `createRenderCore`,
-  который принимает `CoreServices` из `live.ts` и остаётся plain-объектом;
-  `activate`/`deactivate` возвращают `Effect<void, WidgetError>` и выполняются
-  приложением через `ManagedRuntime`.
-
-Готово: тест «активировать два виджета → два контейнера, деактивировать один →
-один контейнер, бандл выгружен».
-
-### Шаг 29. Дренаж в тикере
-
-Файлы: `packages/core/src/loop/ticker.ts`, мост —
-`packages/core/src/effect-adapter.ts`.
-
-- `app.ticker.add(() => adapter.frame())`; `adapter` — единственное место с
-  `runSync` (линт это держит).
-- Кадр: `bus.drain()` по виджетам → `applyCommand` → `watchdog.check()` в одну
-  Effect-программу.
-- Результат `applyCommand` (`errors`, `skipped`) уходит в счётчики статуса;
-  ошибки не отменяют ни кадр, ни остальные виджеты, поэтому кадр обрабатывает
-  значения, а не ловит исключения.
-- Пустой кадр не аллоцирует.
-
-Готово: тест «исключение в applyCommand не ломает обработку следующего виджета».
-
-### Шаг 30. Contract-тест рендер-цели и чекпоинт
-
-Файлы: `packages/core/src/nodes/render-target.contract.ts` и тесты
-`apply-command`, `command-bus`, `effect-registry`, `widget-host`.
-
-Готово: `pnpm -F @tv/core test` зелёный; ни один тест не требует GPU.
-
-**Чекпоинт фазы 2:** Core компилируется и покрыт тестами; на фейковом воркере
-можно активировать виджет, отправить `CreateNode`/`SetTransform` и увидеть
-вызовы рендер-таргета.
+**Чекпоинт фазы 2:** Core компилируется и покрыт тестами без GPU; на фейковом
+воркере виджет активируется в сцену, отправляет `CreateNode`/`SetTransform`, и
+кадр доводит их до рендер-таргета.
 
 ---
 
