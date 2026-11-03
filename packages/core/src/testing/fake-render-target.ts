@@ -9,6 +9,7 @@ import { createRenderState, type RenderState } from "../nodes/render-state";
 
 export interface FakeRenderTargetOptions {
 	readonly widgetId: WidgetId;
+	readonly root?: Container;
 }
 
 export interface FakeRenderCall {
@@ -32,7 +33,7 @@ export function createFakeRenderTarget(
 
 	const target: FakeRenderTarget = {
 		widgetId: options.widgetId,
-		root: {} as Container,
+		root: options.root ?? ({} as Container),
 		calls,
 		createNode(nodeId: NodeId, kind: NodeKind): RenderHandle {
 			state.createNode(nodeId, kind);

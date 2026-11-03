@@ -48,3 +48,9 @@ export type {
 	WidgetHost,
 	WidgetHostServices,
 } from "./widget/widget-host";
+export { createSceneManager } from "./scene/scene-manager";
+export type {
+	ActivateOptions,
+	SceneManager,
+	SceneManagerServices,
+} from "./scene/scene-manager";

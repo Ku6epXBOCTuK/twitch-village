@@ -10,6 +10,7 @@ import {
 	WidgetTimeout,
 } from "@tv/protocol";
 import { Deferred, Effect, Exit, Match } from "effect";
+import type { Container } from "pixi.js";
 import { createEffectRegistry } from "../effects/effect-registry";
 import {
 	Assets,
@@ -65,6 +66,7 @@ export type WidgetHostServices =
 export interface WidgetHost {
 	readonly widgetId: WidgetId;
 	readonly bus: CommandBus;
+	readonly root: Container;
 	start(): Effect.Effect<void, WidgetError>;
 	stop(): Effect.Effect<void>;
 	onCoreEvent(event: ViewerEvent): void;
@@ -241,6 +243,7 @@ export function createWidgetHost(
 		return {
 			widgetId: id,
 			bus: commandBus,
+			root: target.root,
 
 			start: () =>
 				Effect.onExit(
