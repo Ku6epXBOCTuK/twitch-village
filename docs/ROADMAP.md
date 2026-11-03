@@ -92,10 +92,16 @@
 `packages/widget-village/src/world/viewer.ts`.
 
 - `Viewer`: `id`, `displayName`, `color`, `avatarIndex`, `x`, `y`, `vx`, `vy`,
-  `state`, `celebrateUntil`, `nodeIds`.
+  `state`, `celebrateUntil`, `lastSeenAt`, `leavingUntil`, `nodeIds`.
 - Состояния: `idle`, `walk`, `celebrate`, `leaving`.
+- Константы рядом с типами: `MAX_VIEWERS`, `IDLE_TIMEOUT_MS`,
+  `CELEBRATE_MESSAGE_MS`, `CELEBRATE_GIFT_MS`, `LEAVE_FADE_MS`, `AVATAR_COUNT`,
+  палитра `VIEWER_COLORS`.
+- Функции сущности: `createViewer` (спавн у нижней кромки внутри границ),
+  `markCelebrating` (дедлайн не укорачивается), `markLeaving`, `shouldLeave`
+  (тишина дольше `IDLE_TIMEOUT_MS`), `shouldRemove` (затухание прошло).
 
-Готово: типы экспортируются, юнит-тест на переходы состояний.
+Готово: типы экспортируются, юнит-тест на спавн, дедлайны и выход.
 
 ### Шаг 32. Фиксированный тик
 

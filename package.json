@@ -11,6 +11,7 @@
 		"test": "turbo test",
 		"test:watch": "pnpm -F @tv/core test:watch",
 		"test:watch:protocol": "pnpm -F @tv/protocol test:watch",
+		"test:watch:widget": "pnpm -F @tv/widget-village test:watch",
 		"lint": "turbo lint",
 		"assets": "turbo assets",
 		"format": "biome format --write .",
