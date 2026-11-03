@@ -86,32 +86,12 @@
 
 ## Фаза 3. Виджет «деревня»
 
-### Шаг 31. Мир и сущности
+Закрытые шаги фазы:
 
-Файлы: `packages/widget-village/src/world/types.ts`,
-`packages/widget-village/src/world/viewer.ts`.
-
-- `Viewer`: `id`, `displayName`, `color`, `avatarIndex`, `x`, `y`, `vx`, `vy`,
-  `state`, `celebrateUntil`, `lastSeenAt`, `leavingUntil`, `nodeIds`.
-- Состояния: `idle`, `walk`, `celebrate`, `leaving`.
-- Константы рядом с типами: `MAX_VIEWERS`, `IDLE_TIMEOUT_MS`,
-  `CELEBRATE_MESSAGE_MS`, `CELEBRATE_GIFT_MS`, `LEAVE_FADE_MS`, `AVATAR_COUNT`,
-  палитра `VIEWER_COLORS`.
-- Функции сущности: `createViewer` (спавн у нижней кромки внутри границ),
-  `markCelebrating` (дедлайн не укорачивается), `markLeaving`, `shouldLeave`
-  (тишина дольше `IDLE_TIMEOUT_MS`), `shouldRemove` (затухание прошло).
-
-Готово: типы экспортируются, юнит-тест на спавн, дедлайны и выход.
-
-### Шаг 32. Фиксированный тик
-
-Файл: `packages/widget-village/src/world/clock.ts`.
-
-- Накопитель времени: `advance(now) → steps`, шаг 100 мс, максимум 5 шагов за
-  вызов (защита от спирали смерти после лага).
-- Инжектируемое время (`now`) для детерминизма в тестах.
-
-Готово: тест «1 секунда = 10 шагов; 10 секунд лага = 5 шагов максимум».
+| Шаг | Итог                                                                         | Задача | Решение |
+| --- | ---------------------------------------------------------------------------- | ------ | ------- |
+| 31  | `Viewer` и его переходы: спавн в безопасной полосе, максимум дедлайнов, уход | TV-37  | D-18    |
+| 32  | `TickClock`: накопитель на 100 мс, потолок шагов на вызов, сброс эпохи       | TV-38  | —       |
 
 ### Шаг 33. Шаги мира
 
