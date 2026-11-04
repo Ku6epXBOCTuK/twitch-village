@@ -1,7 +1,12 @@
 import { Schema } from "effect";
 import { AssetId, EffectId, NodeId, WidgetId } from "./ids";
 
-export const NodeKindSchema = Schema.Literals(["container", "sprite", "text"]);
+export const NodeKindSchema = Schema.Literals([
+	"container",
+	"sprite",
+	"text",
+	"rect",
+]);
 export type NodeKind = Schema.Schema.Type<typeof NodeKindSchema>;
 
 export const CreateNode = Schema.TaggedStruct("CreateNode", {
@@ -44,11 +49,13 @@ export const SetAnimation = Schema.TaggedStruct("SetAnimation", {
 	loop: Schema.Boolean,
 });
 
+export const ColorSchema = Schema.String.check(
+	Schema.isPattern(/^#[0-9a-fA-F]{6}$/),
+);
+
 export const SetTint = Schema.TaggedStruct("SetTint", {
 	nodeId: NodeId,
-	tint: Schema.NullOr(
-		Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/)),
-	),
+	tint: Schema.NullOr(ColorSchema),
 });
 
 export const SetText = Schema.TaggedStruct("SetText", {
@@ -59,6 +66,17 @@ export const SetText = Schema.TaggedStruct("SetText", {
 		fill: Schema.String,
 		align: Schema.Literals(["left", "center", "right"]),
 	}),
+});
+
+export const SetRectStyle = Schema.TaggedStruct("SetRectStyle", {
+	nodeId: NodeId,
+	width: Schema.Number.check(Schema.isGreaterThan(0)),
+	height: Schema.Number.check(Schema.isGreaterThan(0)),
+	radius: Schema.Number.check(Schema.isGreaterThanOrEqualTo(0)),
+	fill: ColorSchema,
+	alpha: Schema.optional(
+		Schema.Number.check(Schema.isBetween({ minimum: 0, maximum: 1 })),
+	),
 });
 
 export const AddFilter = Schema.TaggedStruct("AddFilter", {
@@ -97,6 +115,7 @@ export const LeafCommandSchema = Schema.Union([
 	SetSprite,
 	SetAnimation,
 	SetText,
+	SetRectStyle,
 	SetTint,
 	AddFilter,
 	RemoveFilter,

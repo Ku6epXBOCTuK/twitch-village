@@ -5,14 +5,14 @@ import {
 	type WidgetId,
 } from "@tv/protocol";
 import type { Filter, Texture } from "pixi.js";
-import { AnimatedSprite, Container, Sprite, Text } from "pixi.js";
+import { AnimatedSprite, Container, Graphics, Sprite, Text } from "pixi.js";
 import { createRenderState } from "./render-state";
 import type {
+	RectStyleState,
 	RenderSnapshot,
 	RenderTarget,
 	TextStyleOptions,
 } from "./render-target";
-
 export interface PixiRenderTargetOptions {
 	readonly widgetId: WidgetId;
 }
@@ -149,6 +149,14 @@ export function createPixiRenderTarget(
 					},
 				}),
 			);
+		},
+		setRectStyle(nodeId, style: RectStyleState) {
+			state.setRectStyle(nodeId, style);
+			const graphics = new Graphics()
+				.roundRect(0, 0, style.width, style.height, style.radius)
+				.fill({ color: style.fill });
+			graphics.alpha = style.alpha;
+			setContent(nodeId, graphics);
 		},
 		addFilter(nodeId, effectId, filter: Filter) {
 			state.addFilter(nodeId, effectId);

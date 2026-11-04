@@ -1,5 +1,6 @@
 import type { NodeId, WidgetId } from "@tv/protocol";
-import { Texture } from "pixi.js";
+import { Graphics, Texture } from "pixi.js";
+import type { Container } from "pixi.js";
 import { describe, expect, it } from "vitest";
 import { createPixiRenderTarget } from "./pixi-render-target";
 import { describeRenderTargetContract } from "./render-target.contract";
@@ -70,14 +71,73 @@ describe("PixiRenderTarget", () => {
 
 		expect(contentOf(target)).toMatchObject({ animationSpeed: 0.25 / 60 });
 	});
+	it("draws a rect as Graphics content", () => {
+		const target = createPixiRenderTarget({ widgetId: "village" as WidgetId });
+		target.createNode(asNodeId("plate"), "rect");
+
+		target.setRectStyle(asNodeId("plate"), rectStyle());
+
+		expect(contentViewOf(target)).toBeInstanceOf(Graphics);
+	});
+
+	it("replaces the previous Graphics when the rect style changes", () => {
+		const target = createPixiRenderTarget({ widgetId: "village" as WidgetId });
+		target.createNode(asNodeId("plate"), "rect");
+		target.setRectStyle(asNodeId("plate"), rectStyle());
+		const first = contentViewOf(target);
+
+		target.setRectStyle(asNodeId("plate"), rectStyle({ width: 4 }));
+
+		expect(first.destroyed).toBe(true);
+		expect(contentViewOf(target)).not.toBe(first);
+	});
+
+	it("applies the rect alpha and keeps the tint", () => {
+		const target = createPixiRenderTarget({ widgetId: "village" as WidgetId });
+		target.createNode(asNodeId("plate"), "rect");
+		target.setTint(asNodeId("plate"), "#00ff00");
+
+		target.setRectStyle(asNodeId("plate"), rectStyle({ alpha: 0.5 }));
+
+		expect(contentOf(target)).toMatchObject({ tint: 0x00ff00 });
+		expect((contentOf(target) as { alpha?: number }).alpha).toBe(0.5);
+	});
 });
 
-const contentOf = (
+const rectStyle = (
+	overrides: Partial<{
+		width: number;
+		height: number;
+		radius: number;
+		fill: string;
+		alpha: number;
+	}> = {},
+): {
+	width: number;
+	height: number;
+	radius: number;
+	fill: string;
+	alpha: number;
+} => ({
+	width: 120,
+	height: 24,
+	radius: 6,
+	fill: "#ff8800",
+	alpha: 1,
+	...overrides,
+});
+
+const contentViewOf = (
 	target: ReturnType<typeof createPixiRenderTarget>,
-): { tint: number; animationSpeed?: number } => {
+): Container => {
 	const content = target.root.children[0]?.children[0];
 	if (content === undefined) {
 		throw new Error("No content in the target");
 	}
-	return content as { tint: number; animationSpeed?: number };
+	return content;
 };
+
+const contentOf = (
+	target: ReturnType<typeof createPixiRenderTarget>,
+): { tint: number; animationSpeed?: number } =>
+	contentViewOf(target) as unknown as { tint: number; animationSpeed?: number };

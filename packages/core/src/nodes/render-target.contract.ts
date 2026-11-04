@@ -218,6 +218,63 @@ export function describeRenderTargetContract(
 			expect(node?.textStyle?.align).toBe("center");
 		});
 
+		it("marks the node as a rect and keeps its style", () => {
+			const target = create(widgetId);
+			target.createNode(asNodeId("plate"), "rect");
+
+			target.setRectStyle(asNodeId("plate"), {
+				width: 120,
+				height: 24,
+				radius: 6,
+				fill: "#ff8800",
+				alpha: 1,
+			});
+
+			const node = target
+				.snapshot()
+				.nodes.find((node) => node.nodeId === "plate");
+			expect(node?.kind).toBe("rect");
+			expect(node?.content).toBe("rect");
+			expect(node?.rect).toEqual({
+				width: 120,
+				height: 24,
+				radius: 6,
+				fill: "#ff8800",
+				alpha: 1,
+			});
+		});
+
+		it("replaces the rect style on the next command", () => {
+			const target = create(widgetId);
+			target.createNode(asNodeId("plate"), "rect");
+			target.setRectStyle(asNodeId("plate"), {
+				width: 120,
+				height: 24,
+				radius: 6,
+				fill: "#ff8800",
+				alpha: 1,
+			});
+
+			target.setRectStyle(asNodeId("plate"), {
+				width: 4,
+				height: 200,
+				radius: 0,
+				fill: "#0000ff",
+				alpha: 0.5,
+			});
+
+			const node = target
+				.snapshot()
+				.nodes.find((node) => node.nodeId === "plate");
+			expect(node?.rect).toMatchObject({
+				width: 4,
+				height: 200,
+				radius: 0,
+				fill: "#0000ff",
+				alpha: 0.5,
+			});
+		});
+
 		it("adds and removes filters", () => {
 			const target = create(widgetId);
 			target.createNode(asNodeId("avatar:1"), "sprite");

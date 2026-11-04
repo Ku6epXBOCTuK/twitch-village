@@ -11,6 +11,7 @@ import type {
 	FilterParamState,
 	NodeSnapshot,
 	NodeTransform,
+	RectStyleState,
 	RenderSnapshot,
 	TextStyleOptions,
 } from "./render-target";
@@ -25,6 +26,7 @@ interface NodeState {
 	content: NodeSnapshot["content"];
 	text: string | undefined;
 	textStyle: TextStyleOptions | undefined;
+	rect: RectStyleState | undefined;
 	animation: AnimationState | undefined;
 	filterIds: EffectId[];
 	filterParams: FilterParamState[];
@@ -47,6 +49,7 @@ export interface RenderState {
 		frameCount: number,
 	): void;
 	setText(nodeId: NodeId, text: string, style: TextStyleOptions): void;
+	setRectStyle(nodeId: NodeId, style: RectStyleState): void;
 	addFilter(nodeId: NodeId, effectId: EffectId): void;
 	removeFilter(nodeId: NodeId, effectId: EffectId): void;
 	setFilterParam(
@@ -93,6 +96,7 @@ export function createRenderState(widgetId: WidgetId): RenderState {
 		content: node.content,
 		text: node.text,
 		textStyle: node.textStyle === undefined ? undefined : { ...node.textStyle },
+		rect: node.rect === undefined ? undefined : { ...node.rect },
 		animation: node.animation === undefined ? undefined : { ...node.animation },
 		filterIds: [...node.filterIds],
 		filterParams: node.filterParams.map((param) => ({ ...param })),
@@ -118,6 +122,7 @@ export function createRenderState(widgetId: WidgetId): RenderState {
 				content: "none",
 				text: undefined,
 				textStyle: undefined,
+				rect: undefined,
 				animation: undefined,
 				filterIds: [],
 				filterParams: [],
@@ -185,6 +190,11 @@ export function createRenderState(widgetId: WidgetId): RenderState {
 			node.content = "text";
 			node.text = text;
 			node.textStyle = { ...style };
+		},
+		setRectStyle(nodeId, style) {
+			const node = requireNode(nodeId);
+			node.content = "rect";
+			node.rect = { ...style };
 		},
 		addFilter(nodeId, effectId) {
 			const node = requireNode(nodeId);

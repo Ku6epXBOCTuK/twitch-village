@@ -393,6 +393,46 @@ describe("applyCommand", () => {
 		]);
 	});
 
+	it("SetRectStyle forwards the style with alpha defaulted to 1", async () => {
+		const { ctx, calls } = setup();
+
+		await run(ctx, {
+			_tag: "SetRectStyle",
+			nodeId,
+			width: 120,
+			height: 24,
+			radius: 6,
+			fill: "#ff8800",
+		});
+
+		expect(calls()).toEqual([
+			{
+				method: "setRectStyle",
+				args: [
+					nodeId,
+					{ width: 120, height: 24, radius: 6, fill: "#ff8800", alpha: 1 },
+				],
+			},
+		]);
+	});
+
+	it("SetRectStyle keeps an explicit alpha", async () => {
+		const { ctx, calls } = setup();
+
+		await run(ctx, {
+			_tag: "SetRectStyle",
+			nodeId,
+			width: 4,
+			height: 200,
+			radius: 0,
+			fill: "#0000ff",
+			alpha: 0.25,
+		});
+
+		expect(calls()[0]?.method).toBe("setRectStyle");
+		expect(calls()[0]?.args[1]).toMatchObject({ alpha: 0.25 });
+	});
+
 	it("AddFilter resolves the filter for the node", async () => {
 		const { ctx, effects, calls } = setup();
 		const effectId = asEffectId("glow");

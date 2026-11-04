@@ -95,6 +95,24 @@ const validCommands: ReadonlyArray<unknown> = [
 	},
 	{ _tag: "RemoveFilter", nodeId, effectId: "glow_pulse" },
 	{ _tag: "RemoveNode", nodeId },
+	{ _tag: "CreateNode", nodeId: "plate", kind: "rect" },
+	{
+		_tag: "SetRectStyle",
+		nodeId,
+		width: 120,
+		height: 24,
+		radius: 6,
+		fill: "#ff8800",
+	},
+	{
+		_tag: "SetRectStyle",
+		nodeId,
+		width: 4,
+		height: 200,
+		radius: 0,
+		fill: "#0000ff",
+		alpha: 0.5,
+	},
 	{ _tag: "Batch", commands: [{ _tag: "RemoveNode", nodeId }] },
 ];
 
@@ -106,6 +124,7 @@ const describeCommand = (command: RenderCommand): string => {
 		SetSprite: (c) => c._tag,
 		SetAnimation: (c) => c._tag,
 		SetText: (c) => c._tag,
+		SetRectStyle: (c) => c._tag,
 		SetTint: (c) => c._tag,
 		AddFilter: (c) => c._tag,
 		SetFilterParam: (c) => c._tag,
@@ -205,6 +224,36 @@ describe("RenderCommandSchema", () => {
 		expect(decode({ ...base, fps: 0.25 })).toMatchObject({ fps: 0.25 });
 		expect(decode({ ...base, fps: 0.1 })).toMatchObject({ fps: 0.1 });
 		expect(decode({ ...base, fps: 60 })).toMatchObject({ fps: 60 });
+	});
+
+	it("rejects a rect without a positive size", () => {
+		const base = {
+			_tag: "SetRectStyle",
+			nodeId,
+			height: 24,
+			radius: 0,
+			fill: "#ff8800",
+		};
+
+		expectInvalid({ ...base, width: 0 });
+		expectInvalid({ ...base, width: -1 });
+		expectInvalid({ ...base, width: 10, height: 0 });
+	});
+
+	it("rejects a rect style with a negative radius, a bad color or alpha", () => {
+		const base = {
+			_tag: "SetRectStyle",
+			nodeId,
+			width: 120,
+			height: 24,
+			radius: 0,
+			fill: "#ff8800",
+		};
+
+		expectInvalid({ ...base, radius: -1 });
+		expectInvalid({ ...base, fill: "orange" });
+		expectInvalid({ ...base, alpha: 1.5 });
+		expectInvalid({ ...base, alpha: -0.1 });
 	});
 
 	it("rejects a batch larger than 2048 commands", () => {

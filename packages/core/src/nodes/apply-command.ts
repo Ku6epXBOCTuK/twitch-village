@@ -142,6 +142,10 @@ const applyLeaf = Effect.fnUntraced(function* (
 			),
 		SetText: ({ nodeId, text, style }) =>
 			attemptForeign(() => ctx.target.setText(nodeId, text, style)),
+		SetRectStyle: ({ nodeId, _tag, alpha, ...style }) =>
+			attemptForeign(() =>
+				ctx.target.setRectStyle(nodeId, { ...style, alpha: alpha ?? 1 }),
+			),
 		SetTint: ({ nodeId, tint }) =>
 			attemptForeign(() => ctx.target.setTint(nodeId, tint)),
 		AddFilter: ({ nodeId, effectId }) =>

@@ -28,6 +28,14 @@ export interface TextStyleOptions {
 	readonly align: "left" | "center" | "right";
 }
 
+export interface RectStyleState {
+	readonly width: number;
+	readonly height: number;
+	readonly radius: number;
+	readonly fill: string;
+	readonly alpha: number;
+}
+
 export interface AnimationState {
 	readonly fps: number;
 	readonly loop: boolean;
@@ -47,9 +55,10 @@ export interface NodeSnapshot {
 	order: number;
 	transform: NodeTransform;
 	tint: string | null;
-	content: "none" | "sprite" | "animated" | "text";
+	content: "none" | "sprite" | "animated" | "text" | "rect";
 	text: string | undefined;
 	textStyle: TextStyleOptions | undefined;
+	rect: RectStyleState | undefined;
 	animation: AnimationState | undefined;
 	filterIds: readonly EffectId[];
 	filterParams: readonly FilterParamState[];
@@ -76,6 +85,7 @@ export interface RenderTarget {
 		loop: boolean,
 	): void;
 	setText(nodeId: NodeId, text: string, style: TextStyleOptions): void;
+	setRectStyle(nodeId: NodeId, style: RectStyleState): void;
 	addFilter(nodeId: NodeId, effectId: EffectId, filter: Filter): void;
 	removeFilter(nodeId: NodeId, effectId: EffectId): void;
 	setFilterParam(

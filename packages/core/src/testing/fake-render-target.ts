@@ -72,6 +72,10 @@ export function createFakeRenderTarget(
 			record("setText", [nodeId, text, style]);
 			state.setText(nodeId, text, style);
 		},
+		setRectStyle(nodeId, style): void {
+			record("setRectStyle", [nodeId, style]);
+			state.setRectStyle(nodeId, style);
+		},
 		addFilter(nodeId: NodeId, effectId: EffectId, filter: Filter): void {
 			record("addFilter", [nodeId, effectId, filter]);
 			state.addFilter(nodeId, effectId);
