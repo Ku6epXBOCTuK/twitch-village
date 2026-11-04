@@ -40,7 +40,7 @@ export const SetSprite = Schema.TaggedStruct("SetSprite", {
 export const SetAnimation = Schema.TaggedStruct("SetAnimation", {
 	nodeId: NodeId,
 	assetIds: Schema.Array(AssetId),
-	fps: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 60 })),
+	fps: Schema.Number.check(Schema.isBetween({ minimum: 0.1, maximum: 60 })),
 	loop: Schema.Boolean,
 });
 

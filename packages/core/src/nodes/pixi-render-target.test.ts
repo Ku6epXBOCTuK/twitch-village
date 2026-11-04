@@ -6,6 +6,12 @@ import { describeRenderTargetContract } from "./render-target.contract";
 
 const asNodeId = (value: string): NodeId => value as NodeId;
 
+// NOTE: AnimatedSprite.play starts Pixi's ticker, which needs requestAnimationFrame absent in Node
+Object.assign(globalThis, {
+	cancelAnimationFrame: () => {},
+	requestAnimationFrame: () => 0,
+});
+
 describeRenderTargetContract("PixiRenderTarget", (widgetId: WidgetId) =>
 	createPixiRenderTarget({ widgetId }),
 );
@@ -55,14 +61,23 @@ describe("PixiRenderTarget", () => {
 
 		expect(contentOf(target).tint).toBe(0x00ff00);
 	});
+
+	it("runs an animation slower than one frame per second", () => {
+		const target = createPixiRenderTarget({ widgetId: "village" as WidgetId });
+		target.createNode(asNodeId("chef"), "sprite");
+
+		target.setAnimation(asNodeId("chef"), [Texture.WHITE], 0.25, true);
+
+		expect(contentOf(target)).toMatchObject({ animationSpeed: 0.25 / 60 });
+	});
 });
 
 const contentOf = (
 	target: ReturnType<typeof createPixiRenderTarget>,
-): { tint: number } => {
+): { tint: number; animationSpeed?: number } => {
 	const content = target.root.children[0]?.children[0];
 	if (content === undefined) {
 		throw new Error("No content in the target");
 	}
-	return content as { tint: number };
+	return content as { tint: number; animationSpeed?: number };
 };

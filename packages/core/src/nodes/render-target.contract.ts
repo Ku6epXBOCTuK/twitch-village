@@ -187,6 +187,18 @@ export function describeRenderTargetContract(
 			expect(node?.animation?.frameCount).toBe(0);
 		});
 
+		it("keeps a fractional fps in the snapshot", () => {
+			const target = create(widgetId);
+			target.createNode(asNodeId("avatar:1"), "sprite");
+
+			target.setAnimation(asNodeId("avatar:1"), [], 0.25, true);
+
+			const node = target
+				.snapshot()
+				.nodes.find((node) => node.nodeId === "avatar:1");
+			expect(node?.animation?.fps).toBe(0.25);
+		});
+
 		it("marks the node as text and keeps the style", () => {
 			const target = create(widgetId);
 			target.createNode(asNodeId("label"), "text");

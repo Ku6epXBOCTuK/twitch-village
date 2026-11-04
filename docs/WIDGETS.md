@@ -40,13 +40,13 @@
 | `SetParent {nodeId, parentId, order}`          | иерархия и порядок                                   |
 | `SetTransform`                                 | `x`, `y`, `scaleX/Y`, `rotation`, `alpha`, `visible` |
 | `SetSprite {assetId}`                          | одна текстура                                        |
-| `SetAnimation {assetIds, fps, loop}`           | покадровая анимация                                  |
+| `SetAnimation {assetIds, fps, loop}`           | покадровая анимация, `fps` дробный от 0.1            |
 | `SetText {text, style{fontSize, fill, align}}` | подпись                                              |
-| `AddFilter`/`RemoveFilter`/`SetFilterParam`    | фильтры по `effectId`, параметр — число              |
+| `SetTint {tint \| null}`                       | цвет содержимого узла                                |
+| `AddFilter`/`RemoveFilter`/`SetFilterParam`    | фильтры по `effectId`, параметр — число или vec2-4   |
 
-Пределы, о которые спотыкается любой готовый виджет: нет цвета-типа, нет
-примитивов вместо `Graphics`, нет vec-параметров фильтров, `fps` целый от 1, нет
-масок, нет `TilingSprite`, стиль текста беден.
+Пределы, о которые спотыкается любой готовый виджет: нет примитивов вместо
+`Graphics`, нет масок, нет `TilingSprite`, стиль текста беден.
 
 ## 3. Аудит двух реальных виджетов
 
@@ -68,7 +68,7 @@
 **`pizdudes-test`** (Pixi 8, ECS, ~40 файлов). Порт: манифест, worker-entry,
 `systems/render.ts` → команды, лист повара assetpack'ом в 64 `assetId` (8
 направлений × 8 кадров), 13 станций по одному, пол спрайтом, бейджи через
-`rect`, `fps 0.25` после шага 56. Оценка — 2-3 дня.
+`rect`, `fps 0.25`. Оценка — 2-3 дня.
 
 **`shooting-word-v2`** (SvelteKit + Pixi 8, ~180 файлов, но виджет — это
 `src/lib/game/*` и `src/lib/vfx/*`). Порт: слова и корабли через `rect` +

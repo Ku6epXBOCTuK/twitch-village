@@ -72,6 +72,13 @@ const validCommands: ReadonlyArray<unknown> = [
 		loop: true,
 	},
 	{
+		_tag: "SetAnimation",
+		nodeId,
+		assetIds: ["chef_walk_0", "chef_walk_1"],
+		fps: 0.25,
+		loop: true,
+	},
+	{
 		_tag: "SetText",
 		nodeId,
 		text: "привет",
@@ -183,12 +190,21 @@ describe("RenderCommandSchema", () => {
 		expect(() => decode({ _tag: "SetTint", nodeId, tint: null })).not.toThrow();
 	});
 
-	it("rejects fps outside 1..60", () => {
+	it("rejects fps outside 0.1..60", () => {
 		const base = { _tag: "SetAnimation", nodeId, assetIds: [], loop: true };
 
 		expectInvalid({ ...base, fps: 0 });
-		expectInvalid({ ...base, fps: 61 });
-		expectInvalid({ ...base, fps: 7.5 });
+		expectInvalid({ ...base, fps: 0.01 });
+		expectInvalid({ ...base, fps: 60.5 });
+		expectInvalid({ ...base, fps: Number.NaN });
+	});
+
+	it("accepts a fractional fps", () => {
+		const base = { _tag: "SetAnimation", nodeId, assetIds: [], loop: true };
+
+		expect(decode({ ...base, fps: 0.25 })).toMatchObject({ fps: 0.25 });
+		expect(decode({ ...base, fps: 0.1 })).toMatchObject({ fps: 0.1 });
+		expect(decode({ ...base, fps: 60 })).toMatchObject({ fps: 60 });
 	});
 
 	it("rejects a batch larger than 2048 commands", () => {
