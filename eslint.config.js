@@ -152,29 +152,6 @@ export default [
 		},
 	},
 	{
-		files: ["packages/widget-village/**/*.ts"],
-		rules: {
-			"@typescript-eslint/no-restricted-imports": [
-				"error",
-				{
-					paths: [
-						{ name: "pixi.js", message: "rendering lives only in core." },
-						{ name: "@tv/core", message: "a widget must not depend on core." },
-						runtimeImportBan(
-							"a widget is plain TS; Effect does not cross the worker boundary.",
-						),
-					],
-					patterns: [
-						runtimePathBan(
-							"a widget is plain TS; Effect does not cross the worker boundary.",
-						),
-					],
-				},
-			],
-			"no-restricted-globals": ["error", "document", "window"],
-		},
-	},
-	{
 		files: ["packages/event-mock/**/*.ts"],
 		rules: {
 			"@typescript-eslint/no-restricted-imports": [

@@ -52,7 +52,7 @@ pnpm format:check       # проверка форматирования без �
 apps/overlay/           OBS browser source: страница, bootstrap Core, debug-панель
 packages/protocol/      контракт Core ↔ Widget: команды, события, ошибки, схемы
 packages/core/          Render Core: Pixi, реестры, WidgetHost, CommandBus, SceneManager
-packages/widget-village/ виджет «деревня»: воркер-энтри, мир, тик, ассеты, эффекты
+packages/widget-<имя>/  виджет: воркер-энтри, мир, тик, ассеты, эффекты
 packages/event-mock/    мок-источник событий зрителей
 packages/config/        общие tsconfig, eslint, vitest-пресеты
 docs/                   архитектура, план, журнал решений

@@ -13,8 +13,7 @@
 	"dependencies": {
 		"@tv/core": "workspace:*",
 		"@tv/event-mock": "workspace:*",
-		"@tv/protocol": "workspace:*",
-		"@tv/widget-village": "workspace:*"
+		"@tv/protocol": "workspace:*"
 	},
 	"devDependencies": {
 		"vite": "^8.0.0"

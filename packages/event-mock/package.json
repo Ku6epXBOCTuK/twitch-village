@@ -8,9 +8,6 @@
 	"exports": {
 		".": "./src/index.ts"
 	},
-	"dependencies": {
-		"@tv/protocol": "workspace:*"
-	},
 	"scripts": {
 		"typecheck": "tsc --noEmit -p tsconfig.json",
 		"test": "vitest run --reporter=../../tools/vitest-failures-first.ts --passWithNoTests",
@@ -18,6 +15,7 @@
 		"lint": "eslint src"
 	},
 	"dependencies": {
+		"@tv/protocol": "workspace:*",
 		"effect": "^4.0.5"
 	}
 }

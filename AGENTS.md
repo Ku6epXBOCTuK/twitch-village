@@ -23,9 +23,10 @@
 версии и грабли: `README.md`. Точные поля схем — только в
 `packages/protocol/src`, в документации их дублировать не нужно.
 
-Пакеты: `@tv/protocol`, `@tv/core`, `@tv/widget-village`, `@tv/event-mock`,
-`@tv/config`, приложение `@tv/overlay`. Монорепо: pnpm + Turborepo, Vite,
-Vitest, TypeScript 5.9, Effect 4, PixiJS 8.
+Пакеты: `@tv/protocol`, `@tv/core`, `@tv/event-mock`, `@tv/config`, приложение
+`@tv/overlay`; виджеты подключаются отдельными пакетами `@tv/widget-<имя>`
+(деревня снята до портов, D-19). Монорепо: pnpm + Turborepo, Vite, Vitest,
+TypeScript 5.9, Effect 4, PixiJS 8.
 
 ## 2. Распределение работы
 
@@ -160,7 +161,7 @@ Vitest, TypeScript 5.9, Effect 4, PixiJS 8.
 ## 5. Инварианты, которые нельзя нарушать
 
 - `pixi.js`, `@tv/core` и DOM (`window`, `document`) недоступны из
-  `widget-village`; `core` не импортирует конкретные виджеты.
+  `@tv/widget-<имя>`; `core` не импортирует конкретные виджеты.
 - `PIXI.Application` не пересоздаётся при переключении виджетов.
 - Сообщения протокола — plain-объекты, сериализуемые `structuredClone` (никаких
   классов, функций и `undefined` в значениях).
