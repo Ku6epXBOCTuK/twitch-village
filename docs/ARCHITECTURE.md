@@ -232,6 +232,11 @@ twitch-village/
   цвет. Живёт на содержимом узла (`Sprite`/`AnimatedSprite`/`Text`): `Container`
   в Pixi 8 объявляет `tint`, но пикселей не рисует, поэтому красить контейнер
   бессмысленно.
+- примитив — `CreateNode kind: "rect"` плюс
+  `SetRectStyle {nodeId, width, height,   radius, fill, alpha?}`. В таргете это
+  `Graphics` с закруглённым прямоугольником, в снимке — `content: "rect"` и
+  `rect`; `alpha` по умолчанию 1 подставляет `applyCommand`, чтобы таргет всегда
+  получал полный стиль. Виджет `Graphics` не создаёт.
 
 ### 4.3. События Core → Widget (`WidgetEvent`)
 
