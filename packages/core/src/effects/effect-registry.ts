@@ -1,8 +1,9 @@
 import {
 	EffectCompileFailed,
-	EffectNotFound,
-	InvalidEffectParam,
 	type EffectId,
+	EffectNotFound,
+	type FilterParamValue,
+	InvalidEffectParam,
 	type NodeId,
 	type WidgetId,
 } from "@tv/protocol";
@@ -34,7 +35,7 @@ export interface EffectRegistry {
 	setParam(
 		effectId: EffectId,
 		param: string,
-		value: number,
+		value: FilterParamValue,
 	): Effect.Effect<void, EffectNotFound | InvalidEffectParam>;
 	isBroken(effectId: EffectId): boolean;
 	release(nodeId: NodeId): Effect.Effect<void>;
@@ -58,6 +59,7 @@ export function createEffectRegistry(
 			}
 			effectIds.add(effect.effectId);
 			for (const param of effect.params) {
+				if (param.type !== "number") continue;
 				if (param.max < param.min) {
 					throw new Error(
 						`Manifest error: bounds are inverted for param ${param.name} in effect ${effect.effectId}`,
@@ -102,6 +104,17 @@ export function createEffectRegistry(
 			}
 		}
 		instances.clear();
+	}
+
+	function paramVecLength(type: "vec2" | "vec3" | "vec4"): 2 | 3 | 4 {
+		switch (type) {
+			case "vec2":
+				return 2;
+			case "vec3":
+				return 3;
+			case "vec4":
+				return 4;
+		}
 	}
 
 	return {
@@ -150,7 +163,7 @@ export function createEffectRegistry(
 					return Effect.succeed(filter);
 				},
 			),
-		setParam: (effectId: EffectId, param: string, value: number) =>
+		setParam: (effectId: EffectId, param: string, value: FilterParamValue) =>
 			Effect.suspend(
 				(): Effect.Effect<void, EffectNotFound | InvalidEffectParam> => {
 					const effect = definitionOf(effectId);
@@ -167,15 +180,56 @@ export function createEffectRegistry(
 								param,
 							}),
 						);
-					if (value < effectParam.min || value > effectParam.max)
-						return Effect.fail(
-							new InvalidEffectParam({
-								widgetId: options.widgetId,
-								message: `Effect ${effectId} param ${param}=${value}  is outside ${effectParam.min}..${effectParam.max} in widget ${options.widgetId}`,
-								effectId,
-								param,
-							}),
-						);
+					switch (effectParam.type) {
+						case "number":
+							if (typeof value !== "number") {
+								return Effect.fail(
+									new InvalidEffectParam({
+										widgetId: options.widgetId,
+										message: `Effect ${effectId} param ${param} must be a number in widget ${options.widgetId}`,
+										effectId,
+										param,
+									}),
+								);
+							}
+							if (value < effectParam.min || value > effectParam.max)
+								return Effect.fail(
+									new InvalidEffectParam({
+										widgetId: options.widgetId,
+										message: `Effect ${effectId} param ${param}=${value} is outside ${effectParam.min}..${effectParam.max} in widget ${options.widgetId}`,
+										effectId,
+										param,
+									}),
+								);
+							break;
+						case "vec2":
+						case "vec3":
+						case "vec4": {
+							if (!Array.isArray(value)) {
+								return Effect.fail(
+									new InvalidEffectParam({
+										widgetId: options.widgetId,
+										message: `Effect ${effectId} param ${param} must be a vector in widget ${options.widgetId}`,
+										effectId,
+										param,
+									}),
+								);
+							}
+							const requiredVecLen = paramVecLength(effectParam.type);
+							if (value.length !== requiredVecLen) {
+								return Effect.fail(
+									new InvalidEffectParam({
+										widgetId: options.widgetId,
+										message: `Effect ${effectId} param ${param} must be a vector of ${requiredVecLen} numbers in widget ${options.widgetId}`,
+										effectId,
+										param,
+									}),
+								);
+							}
+							break;
+						}
+					}
+
 					return Effect.void;
 				},
 			),

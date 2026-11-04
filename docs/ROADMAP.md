@@ -426,34 +426,12 @@ pnpm build
 обе реализации `RenderTarget` (`pixi` и `fake`) → контрактный тест → счётчики и
 ошибки, если появились. Виджет не трогается, пока расширение не зелёное.
 
-### Шаг 54. Цвет узла
+Закрытые шаги фазы:
 
-Файлы: `packages/protocol/src/commands.ts`, `packages/core/src/nodes/*`,
-`packages/core/src/testing/fake-render-target.ts`.
-
-- Новая команда `SetTint {nodeId, tint: "#rrggbb" | null}`: отдельная, а не поле
-  `SetTransform`, потому что цвет меняется по событию, а не каждый кадр; `null`
-  возвращает исходный цвет спрайта.
-- Формат проверяется `Schema`, а не руками; в `RenderTarget` — метод `setTint`,
-  в snapshot — поле `tint`.
-- `PROTOCOL_VERSION` растёт, `FakeRenderTarget` проходит тот же контракт.
-
-Готово: контракт рендер-цели на двух реализациях, тест «`SetTint` меняет цвет и
-`null` его снимает».
-
-### Шаг 55. Параметры фильтров, кроме числа
-
-Файл: `packages/protocol/src/commands.ts`,
-`packages/core/src/effects/effect-registry.ts`.
-
-- `SetFilterParam.value` становится
-  `number | [number, number] |   [number, number, number] | [number, number, number, number]`
-  — этого хватает на vec2/vec3 и на цвет.
-- `EffectRegistry.setParam` проверяет тип против манифеста: число в вектор и
-  вектор в число — `InvalidEffectParam`, а не тихий `NaN`.
-
-Готово: тест «векторный параметр доходит до компилятора фильтра, число в
-векторный — `InvalidEffectParam`».
+| Шаг | Итог                                                                | Задача | Решение |
+| --- | ------------------------------------------------------------------- | ------ | ------- |
+| 54  | `SetTint`: цвет на содержимом узла, `null` снимает его, протокол v2 | TV-40  | D-20    |
+| 55  | Параметры фильтров: число, vec2/vec3/vec4 по типу из манифеста      | TV-41  | —       |
 
 ### Шаг 56. Дробный fps
 

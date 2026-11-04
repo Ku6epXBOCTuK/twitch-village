@@ -1,4 +1,10 @@
-import type { EffectId, NodeId, NodeKind, WidgetId } from "@tv/protocol";
+import type {
+	EffectId,
+	FilterParamValue,
+	NodeId,
+	NodeKind,
+	WidgetId,
+} from "@tv/protocol";
 import { InvalidCommand, UnknownNode } from "@tv/protocol";
 import type {
 	AnimationState,
@@ -47,7 +53,7 @@ export interface RenderState {
 		nodeId: NodeId,
 		effectId: EffectId,
 		param: string,
-		value: number,
+		value: FilterParamValue,
 	): void;
 	snapshot(): RenderSnapshot;
 }

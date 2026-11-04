@@ -71,11 +71,22 @@ export const RemoveFilter = Schema.TaggedStruct("RemoveFilter", {
 	effectId: EffectId,
 });
 
+export const FilterParamValueSchema = Schema.Union([
+	Schema.Number,
+	Schema.Tuple([Schema.Number, Schema.Number]),
+	Schema.Tuple([Schema.Number, Schema.Number, Schema.Number]),
+	Schema.Tuple([Schema.Number, Schema.Number, Schema.Number, Schema.Number]),
+]);
+
+export type FilterParamValue = Schema.Schema.Type<
+	typeof FilterParamValueSchema
+>;
+
 export const SetFilterParam = Schema.TaggedStruct("SetFilterParam", {
 	nodeId: NodeId,
 	effectId: EffectId,
 	param: Schema.String,
-	value: Schema.Number,
+	value: FilterParamValueSchema,
 });
 
 export const LeafCommandSchema = Schema.Union([

@@ -1,4 +1,10 @@
-import type { EffectId, NodeId, NodeKind, WidgetId } from "@tv/protocol";
+import type {
+	EffectId,
+	FilterParamValue,
+	NodeId,
+	NodeKind,
+	WidgetId,
+} from "@tv/protocol";
 import type { Container, Filter, Texture } from "pixi.js";
 
 export interface RenderHandle {
@@ -31,7 +37,7 @@ export interface AnimationState {
 export interface FilterParamState {
 	readonly effectId: EffectId;
 	readonly param: string;
-	readonly value: number;
+	readonly value: FilterParamValue;
 }
 
 export interface NodeSnapshot {
@@ -76,7 +82,7 @@ export interface RenderTarget {
 		nodeId: NodeId,
 		effectId: EffectId,
 		param: string,
-		value: number,
+		value: FilterParamValue,
 	): void;
 	snapshot(): RenderSnapshot;
 }

@@ -4,6 +4,7 @@ import {
 	type EffectCompileFailed,
 	type EffectId,
 	type EffectNotFound,
+	type FilterParamValue,
 	type InvalidEffectParam,
 	type LeafCommand,
 	type NodeId,
@@ -41,7 +42,7 @@ export interface FilterSource {
 	setParam(
 		effectId: EffectId,
 		param: string,
-		value: number,
+		value: FilterParamValue,
 	): Effect.Effect<void, EffectNotFound | InvalidEffectParam>;
 	release(nodeId: NodeId): Effect.Effect<void>;
 }

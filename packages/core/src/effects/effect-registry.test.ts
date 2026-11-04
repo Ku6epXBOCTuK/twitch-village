@@ -1,8 +1,8 @@
 import {
 	EffectCompileFailed,
+	type EffectId,
 	EffectNotFound,
 	InvalidEffectParam,
-	type EffectId,
 	type NodeId,
 	type WidgetId,
 } from "@tv/protocol";
@@ -23,6 +23,7 @@ const asNodeId = (value: string): NodeId => value as NodeId;
 
 const glow = asEffectId("glow_pulse");
 const outline = asEffectId("outline");
+const aura = asEffectId("aura");
 
 const nodeOne = asNodeId("node-1");
 const nodeTwo = asNodeId("node-2");
@@ -32,8 +33,8 @@ const glowDefinition: EffectDefinition = {
 	vertex: "vertex",
 	fragment: "fragment",
 	params: [
-		{ name: "uIntensity", min: 0, max: 1, default: 0.5 },
-		{ name: "uTime", min: 0, max: 1000, default: 0 },
+		{ type: "number", name: "uIntensity", min: 0, max: 1, default: 0.5 },
+		{ type: "number", name: "uTime", min: 0, max: 1000, default: 0 },
 	],
 };
 
@@ -41,11 +42,18 @@ const outlineDefinition: EffectDefinition = {
 	effectId: outline,
 	vertex: "vertex",
 	fragment: "fragment",
-	params: [{ name: "uWidth", min: 1, max: 8, default: 2 }],
+	params: [{ type: "number", name: "uWidth", min: 1, max: 8, default: 2 }],
+};
+
+const auraDefinition: EffectDefinition = {
+	effectId: aura,
+	vertex: "vertex",
+	fragment: "fragment",
+	params: [{ type: "vec3", name: "uColor", default: [1, 0.5, 0] }],
 };
 
 const manifest: EffectManifest = {
-	effects: [glowDefinition, outlineDefinition],
+	effects: [glowDefinition, outlineDefinition, auraDefinition],
 };
 
 const run = <A, E>(effect: Effect.Effect<A, E>): Promise<A> =>
@@ -268,7 +276,9 @@ describe("EffectRegistry", () => {
 			effects: [
 				{
 					...glowDefinition,
-					params: [{ name: "uIntensity", min: 0, max: 1, default: 2 }],
+					params: [
+						{ type: "number", name: "uIntensity", min: 0, max: 1, default: 2 },
+					],
 				},
 			],
 		};
@@ -282,11 +292,55 @@ describe("EffectRegistry", () => {
 			effects: [
 				{
 					...glowDefinition,
-					params: [{ name: "uIntensity", min: 1, max: 0, default: 0.5 }],
+					params: [
+						{
+							type: "number",
+							name: "uIntensity",
+							min: 1,
+							max: 0,
+							default: 0.5,
+						},
+					],
 				},
 			],
 		};
 
 		expect(() => registry.register(broken)).toThrow(/uIntensity/);
+	});
+
+	it("accepts a vector param declared in the manifest", async () => {
+		const { registry } = withGlow();
+
+		await expect(
+			run(registry.setParam(aura, "uColor", [1, 0.5, 0])),
+		).resolves.toBeUndefined();
+	});
+
+	it("rejects a number for a vector param", async () => {
+		const { registry } = withGlow();
+
+		const failure = await failureOf(registry.setParam(aura, "uColor", 1));
+
+		expect(failure._tag).toBe("InvalidEffectParam");
+	});
+
+	it("rejects a vector for a number param", async () => {
+		const { registry } = withGlow();
+
+		const failure = await failureOf(
+			registry.setParam(glow, "uIntensity", [1, 0.5, 0]),
+		);
+
+		expect(failure._tag).toBe("InvalidEffectParam");
+	});
+
+	it("rejects a vector of the wrong length", async () => {
+		const { registry } = withGlow();
+
+		const failure = await failureOf(
+			registry.setParam(aura, "uColor", [1, 0.5]),
+		);
+
+		expect(failure._tag).toBe("InvalidEffectParam");
 	});
 });
