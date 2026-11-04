@@ -15,6 +15,7 @@ interface NodeState {
 	parentId: NodeId | undefined;
 	order: number;
 	transform: NodeTransform;
+	tint: string | null;
 	content: NodeSnapshot["content"];
 	text: string | undefined;
 	textStyle: TextStyleOptions | undefined;
@@ -30,6 +31,8 @@ export interface RenderState {
 	removeNode(nodeId: NodeId): readonly NodeSnapshot[];
 	setParent(nodeId: NodeId, parentId: NodeId | null, order: number): void;
 	setTransform(nodeId: NodeId, transform: NodeTransform): void;
+	setTint(nodeId: NodeId, tint: string | null): void;
+	getTint(nodeId: NodeId): string | null;
 	setSprite(nodeId: NodeId): void;
 	setAnimation(
 		nodeId: NodeId,
@@ -80,6 +83,7 @@ export function createRenderState(widgetId: WidgetId): RenderState {
 		parentId: node.parentId,
 		order: node.order,
 		transform: { ...node.transform },
+		tint: node.tint,
 		content: node.content,
 		text: node.text,
 		textStyle: node.textStyle === undefined ? undefined : { ...node.textStyle },
@@ -104,6 +108,7 @@ export function createRenderState(widgetId: WidgetId): RenderState {
 				parentId: undefined,
 				order: 0,
 				transform: {},
+				tint: null,
 				content: "none",
 				text: undefined,
 				textStyle: undefined,
@@ -154,6 +159,12 @@ export function createRenderState(widgetId: WidgetId): RenderState {
 		setTransform(nodeId, transform) {
 			const node = requireNode(nodeId);
 			node.transform = { ...node.transform, ...transform };
+		},
+		setTint(nodeId, tint) {
+			requireNode(nodeId).tint = tint;
+		},
+		getTint(nodeId) {
+			return requireNode(nodeId).tint;
 		},
 		setSprite(nodeId) {
 			requireNode(nodeId).content = "sprite";

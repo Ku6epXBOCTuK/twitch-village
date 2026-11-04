@@ -1,6 +1,6 @@
 import {
-	InvalidCommand,
 	type EffectId,
+	InvalidCommand,
 	type NodeId,
 	type WidgetId,
 } from "@tv/protocol";
@@ -41,6 +41,8 @@ export function createPixiRenderTarget(
 			previous.destroy({ children: true });
 		}
 		requireView(nodeId).addChild(next);
+		const tint = state.getTint(nodeId);
+		next.tint = tint ?? 0xffffff;
 		contents.set(nodeId, next);
 	};
 
@@ -103,6 +105,13 @@ export function createPixiRenderTarget(
 			if (transform.rotation !== undefined) view.rotation = transform.rotation;
 			if (transform.alpha !== undefined) view.alpha = transform.alpha;
 			if (transform.visible !== undefined) view.visible = transform.visible;
+		},
+		setTint(nodeId, tint) {
+			state.setTint(nodeId, tint);
+			const content = contents.get(nodeId);
+			if (content !== undefined) {
+				content.tint = tint ?? 0xffffff;
+			}
 		},
 		setSprite(nodeId, texture: Texture) {
 			state.setSprite(nodeId);

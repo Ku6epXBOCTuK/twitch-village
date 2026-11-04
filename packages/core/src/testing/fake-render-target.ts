@@ -56,6 +56,10 @@ export function createFakeRenderTarget(
 			record("setTransform", [nodeId, transform]);
 			state.setTransform(nodeId, transform);
 		},
+		setTint(nodeId: NodeId, tint: string | null): void {
+			record("setTint", [nodeId, tint]);
+			state.setTint(nodeId, tint);
+		},
 		setSprite(nodeId: NodeId, texture: Texture): void {
 			record("setSprite", [nodeId, texture]);
 			state.setSprite(nodeId);

@@ -43,6 +43,64 @@ export function describeRenderTargetContract(
 			expect(child?.order).toBe(3);
 		});
 
+		it("starts a node without a tint", () => {
+			const target = create(widgetId);
+
+			target.createNode(asNodeId("avatar:1"), "sprite");
+
+			expect(
+				target.snapshot().nodes.find((node) => node.nodeId === "avatar:1")
+					?.tint,
+			).toBeNull();
+		});
+
+		it("keeps the tint of a node in the snapshot", () => {
+			const target = create(widgetId);
+			target.createNode(asNodeId("avatar:1"), "sprite");
+
+			target.setTint(asNodeId("avatar:1"), "#ff8800");
+
+			expect(
+				target.snapshot().nodes.find((node) => node.nodeId === "avatar:1")
+					?.tint,
+			).toBe("#ff8800");
+		});
+
+		it("clears the tint when the command gives no color", () => {
+			const target = create(widgetId);
+			target.createNode(asNodeId("avatar:1"), "sprite");
+			target.setTint(asNodeId("avatar:1"), "#ff8800");
+
+			target.setTint(asNodeId("avatar:1"), null);
+
+			expect(
+				target.snapshot().nodes.find((node) => node.nodeId === "avatar:1")
+					?.tint,
+			).toBeNull();
+		});
+
+		it("keeps the tint when the transform changes", () => {
+			const target = create(widgetId);
+			target.createNode(asNodeId("avatar:1"), "sprite");
+			target.setTint(asNodeId("avatar:1"), "#00ff00");
+
+			target.setTransform(asNodeId("avatar:1"), { x: 5, y: 7 });
+
+			const node = target
+				.snapshot()
+				.nodes.find((snapshot) => snapshot.nodeId === "avatar:1");
+			expect(node?.tint).toBe("#00ff00");
+			expect(node?.transform.x).toBe(5);
+		});
+
+		it("rejects a tint for an unknown node with UnknownNode", () => {
+			const target = create(widgetId);
+
+			expect(() => target.setTint(asNodeId("ghost"), "#ff8800")).toThrow(
+				UnknownNode,
+			);
+		});
+
 		it("detaches a node to the root when the parent is null", () => {
 			const target = create(widgetId);
 			target.createNode(asNodeId("parent"), "container");

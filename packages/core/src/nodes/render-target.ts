@@ -40,6 +40,7 @@ export interface NodeSnapshot {
 	parentId: NodeId | undefined;
 	order: number;
 	transform: NodeTransform;
+	tint: string | null;
 	content: "none" | "sprite" | "animated" | "text";
 	text: string | undefined;
 	textStyle: TextStyleOptions | undefined;
@@ -60,6 +61,7 @@ export interface RenderTarget {
 	removeNode(nodeId: NodeId): readonly NodeId[];
 	setParent(nodeId: NodeId, parentId: NodeId | null, order: number): void;
 	setTransform(nodeId: NodeId, transform: NodeTransform): void;
+	setTint(nodeId: NodeId, tint: string | null): void;
 	setSprite(nodeId: NodeId, texture: Texture): void;
 	setAnimation(
 		nodeId: NodeId,

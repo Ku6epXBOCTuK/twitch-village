@@ -77,6 +77,7 @@ const validCommands: ReadonlyArray<unknown> = [
 		text: "привет",
 		style: { fontSize: 12, fill: "#ffffff", align: "center" },
 	},
+	{ _tag: "SetTint", nodeId, tint: "#ff8800" },
 	{ _tag: "AddFilter", nodeId, effectId: "glow_pulse" },
 	{
 		_tag: "SetFilterParam",
@@ -98,6 +99,7 @@ const describeCommand = (command: RenderCommand): string => {
 		SetSprite: (c) => c._tag,
 		SetAnimation: (c) => c._tag,
 		SetText: (c) => c._tag,
+		SetTint: (c) => c._tag,
 		AddFilter: (c) => c._tag,
 		SetFilterParam: (c) => c._tag,
 		RemoveFilter: (c) => c._tag,
@@ -142,7 +144,7 @@ describe("RenderCommandSchema", () => {
 
 	it("matches every variant exhaustively", () => {
 		expect(describeCommand(decode(validCommands[0]))).toBe("CreateNode");
-		expect(describeCommand(decode(validCommands[12]))).toBe("Batch");
+		expect(describeCommand(decode(validCommands.at(-1)))).toBe("Batch");
 	});
 
 	it("rejects an unknown tag", () => {
@@ -169,6 +171,16 @@ describe("RenderCommandSchema", () => {
 	it("rejects alpha outside 0..1", () => {
 		expectInvalid({ _tag: "SetTransform", nodeId, alpha: 1.1 });
 		expectInvalid({ _tag: "SetTransform", nodeId, alpha: -0.1 });
+	});
+
+	it("rejects a tint that is not a hex color", () => {
+		expectInvalid({ _tag: "SetTint", nodeId, tint: "red" });
+		expectInvalid({ _tag: "SetTint", nodeId, tint: "#f80" });
+		expectInvalid({ _tag: "SetTint", nodeId, tint: "ff8800" });
+	});
+
+	it("accepts a cleared tint", () => {
+		expect(() => decode({ _tag: "SetTint", nodeId, tint: null })).not.toThrow();
 	});
 
 	it("rejects fps outside 1..60", () => {

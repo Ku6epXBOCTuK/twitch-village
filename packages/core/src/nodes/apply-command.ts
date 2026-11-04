@@ -1,6 +1,4 @@
 import {
-	RenderFailed,
-	UnknownNode,
 	type AssetId,
 	type AssetNotFound,
 	type EffectCompileFailed,
@@ -10,6 +8,8 @@ import {
 	type LeafCommand,
 	type NodeId,
 	type RenderCommand,
+	RenderFailed,
+	UnknownNode,
 	type WidgetId,
 } from "@tv/protocol";
 import { Effect, Match } from "effect";
@@ -141,6 +141,8 @@ const applyLeaf = Effect.fnUntraced(function* (
 			),
 		SetText: ({ nodeId, text, style }) =>
 			attemptForeign(() => ctx.target.setText(nodeId, text, style)),
+		SetTint: ({ nodeId, tint }) =>
+			attemptForeign(() => ctx.target.setTint(nodeId, tint)),
 		AddFilter: ({ nodeId, effectId }) =>
 			Effect.flatMap(ctx.effects.get(effectId, nodeId), (filter) =>
 				attemptForeign(() => ctx.target.addFilter(nodeId, effectId, filter)),

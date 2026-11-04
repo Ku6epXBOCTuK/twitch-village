@@ -113,13 +113,16 @@ describe("createWorkerTransport", () => {
 	it("reports ProtocolMismatch and terminates on a foreign envelope version", () => {
 		const { worker, failures, transport } = setup();
 
-		worker.emitMessage({ ...readyEnvelope(), protocolVersion: 2 });
+		worker.emitMessage({
+			...readyEnvelope(),
+			protocolVersion: PROTOCOL_VERSION + 1,
+		});
 
 		expect(failures).toHaveLength(1);
 		const failure = failures[0];
 		expect(failure).toBeInstanceOf(ProtocolMismatch);
 		if (failure instanceof ProtocolMismatch) {
-			expect(failure.actualVersion).toBe(2);
+			expect(failure.actualVersion).toBe(PROTOCOL_VERSION + 1);
 			expect(failure.expectedVersion).toBe(PROTOCOL_VERSION);
 		}
 		expect(transport.state).toBe("closed");
@@ -129,7 +132,9 @@ describe("createWorkerTransport", () => {
 	it("reports ProtocolMismatch when Ready carries a foreign version", () => {
 		const { worker, failures } = setup();
 
-		worker.emitMessage(readyEnvelope({ protocolVersion: 2 }));
+		worker.emitMessage(
+			readyEnvelope({ protocolVersion: PROTOCOL_VERSION + 1 }),
+		);
 
 		expect(failures[0]).toBeInstanceOf(ProtocolMismatch);
 		expect(worker.terminated).toBe(true);

@@ -44,6 +44,13 @@ export const SetAnimation = Schema.TaggedStruct("SetAnimation", {
 	loop: Schema.Boolean,
 });
 
+export const SetTint = Schema.TaggedStruct("SetTint", {
+	nodeId: NodeId,
+	tint: Schema.NullOr(
+		Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/)),
+	),
+});
+
 export const SetText = Schema.TaggedStruct("SetText", {
 	nodeId: NodeId,
 	text: Schema.String,
@@ -79,6 +86,7 @@ export const LeafCommandSchema = Schema.Union([
 	SetSprite,
 	SetAnimation,
 	SetText,
+	SetTint,
 	AddFilter,
 	RemoveFilter,
 	SetFilterParam,

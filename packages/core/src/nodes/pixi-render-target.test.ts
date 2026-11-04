@@ -1,4 +1,5 @@
 import type { NodeId, WidgetId } from "@tv/protocol";
+import { Texture } from "pixi.js";
 import { describe, expect, it } from "vitest";
 import { createPixiRenderTarget } from "./pixi-render-target";
 import { describeRenderTargetContract } from "./render-target.contract";
@@ -23,4 +24,45 @@ describe("PixiRenderTarget", () => {
 
 		expect(target.root.children).toHaveLength(2);
 	});
+
+	it("colors the sprite that carries the node content", () => {
+		const target = createPixiRenderTarget({ widgetId: "village" as WidgetId });
+		target.createNode(asNodeId("avatar"), "sprite");
+		target.setSprite(asNodeId("avatar"), Texture.WHITE);
+
+		target.setTint(asNodeId("avatar"), "#ff8800");
+
+		expect(contentOf(target).tint).toBe(0xff8800);
+	});
+
+	it("clears the tint back to white when the command gives no color", () => {
+		const target = createPixiRenderTarget({ widgetId: "village" as WidgetId });
+		target.createNode(asNodeId("avatar"), "sprite");
+		target.setSprite(asNodeId("avatar"), Texture.WHITE);
+		target.setTint(asNodeId("avatar"), "#ff8800");
+
+		target.setTint(asNodeId("avatar"), null);
+
+		expect(contentOf(target).tint).toBe(0xffffff);
+	});
+
+	it("keeps the tint when the content is replaced", () => {
+		const target = createPixiRenderTarget({ widgetId: "village" as WidgetId });
+		target.createNode(asNodeId("avatar"), "sprite");
+		target.setTint(asNodeId("avatar"), "#00ff00");
+
+		target.setSprite(asNodeId("avatar"), Texture.WHITE);
+
+		expect(contentOf(target).tint).toBe(0x00ff00);
+	});
 });
+
+const contentOf = (
+	target: ReturnType<typeof createPixiRenderTarget>,
+): { tint: number } => {
+	const content = target.root.children[0]?.children[0];
+	if (content === undefined) {
+		throw new Error("No content in the target");
+	}
+	return content as { tint: number };
+};
