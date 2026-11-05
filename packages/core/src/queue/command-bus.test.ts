@@ -1,7 +1,12 @@
 import type { NodeId, RenderCommand, WidgetId } from "@tv/protocol";
 import { QueueOverflow } from "@tv/protocol";
-import { describe, expect, it, vi } from "vitest";
-import { createCommandBus, type CommandBusConfig } from "./command-bus";
+import { Effect } from "effect";
+import { describe, expect, it } from "vitest";
+import {
+	type CommandBus,
+	type CommandBusConfig,
+	createCommandBus,
+} from "./command-bus";
 
 const village = "village" as WidgetId;
 const alerts = "alerts" as WidgetId;
@@ -38,194 +43,249 @@ const steppedClock = (steps: readonly number[]): (() => number) => {
 	};
 };
 
-describe("CommandBus", () => {
-	it("drains commands in the order they were pushed", () => {
-		const bus = createCommandBus(config());
-		bus.push(village, commands(2, "first"));
-		bus.push(village, commands(2, "second"));
+const busOf = (overrides: Partial<CommandBusConfig> = {}) =>
+	Effect.runPromise(createCommandBus(config(overrides)));
 
-		expect(nodeIds(bus.drain(village))).toEqual([
+const push = (
+	bus: CommandBus,
+	widgetId: WidgetId,
+	batch: readonly RenderCommand[],
+) => Effect.runPromise(bus.push(widgetId, batch));
+
+const drain = (
+	bus: CommandBus,
+	widgetId: WidgetId,
+): Promise<readonly RenderCommand[]> =>
+	Effect.runPromise(bus.drain(widgetId)).then((batch) => batch);
+
+const commit = (bus: CommandBus, widgetId: WidgetId, applied: number) =>
+	Effect.runPromise(bus.commit(widgetId, applied));
+
+const stats = (bus: CommandBus, widgetId: WidgetId) =>
+	Effect.runPromise(bus.stats(widgetId));
+
+describe("CommandBus", () => {
+	it("drains commands in the order they were pushed", async () => {
+		const bus = await busOf();
+		await push(bus, village, commands(2, "first"));
+		await push(bus, village, commands(2, "second"));
+
+		expect(nodeIds(await drain(bus, village))).toEqual([
 			"first0",
 			"first1",
 			"second0",
 			"second1",
 		]);
-		expect(bus.drain(village)).toEqual([]);
+		expect(await drain(bus, village)).toEqual([]);
 	});
 
-	it("keeps a separate queue per widget", () => {
-		const bus = createCommandBus(config());
-		bus.push(village, commands(1, "village"));
-		bus.push(alerts, commands(1, "alerts"));
+	it("keeps a separate queue per widget", async () => {
+		const bus = await busOf();
+		await push(bus, village, commands(1, "village"));
+		await push(bus, alerts, commands(1, "alerts"));
 
-		expect(bus.stats(village).queued).toBe(1);
-		expect(bus.stats(alerts).queued).toBe(1);
-		expect(nodeIds(bus.drain(alerts))).toEqual(["alerts0"]);
-		expect(nodeIds(bus.drain(village))).toEqual(["village0"]);
+		expect((await stats(bus, village)).queued).toBe(1);
+		expect((await stats(bus, alerts)).queued).toBe(1);
+		expect(nodeIds(await drain(bus, alerts))).toEqual(["alerts0"]);
+		expect(nodeIds(await drain(bus, village))).toEqual(["village0"]);
 	});
 
-	it("stops at the command budget and keeps the rest for the next frame", () => {
-		const bus = createCommandBus(config({ maxCommandsPerFrame: 2 }));
-		bus.push(village, commands(5));
+	it("stops at the command budget and keeps the rest for the next frame", async () => {
+		const bus = await busOf({ maxCommandsPerFrame: 2 });
+		await push(bus, village, commands(5));
 
-		expect(nodeIds(bus.drain(village))).toEqual(["node0", "node1"]);
-		expect(nodeIds(bus.drain(village))).toEqual(["node2", "node3"]);
-		expect(nodeIds(bus.drain(village))).toEqual(["node4"]);
-		expect(bus.drain(village)).toEqual([]);
+		expect(nodeIds(await drain(bus, village))).toEqual(["node0", "node1"]);
+		expect(nodeIds(await drain(bus, village))).toEqual(["node2", "node3"]);
+		expect(nodeIds(await drain(bus, village))).toEqual(["node4"]);
+		expect(await drain(bus, village)).toEqual([]);
 	});
 
-	it("stops after the command that crosses the time budget", () => {
-		const bus = createCommandBus(
-			config({ maxDrainMs: 4, now: steppedClock([0, 100]) }),
-		);
-		bus.push(village, commands(5));
+	it("stops after the command that crosses the time budget", async () => {
+		const bus = await busOf({
+			maxDrainMs: 4,
+			now: steppedClock([0, 100]),
+		});
+		await push(bus, village, commands(5));
 
-		expect(nodeIds(bus.drain(village))).toEqual(["node0"]);
-		expect(bus.stats(village).queued).toBe(4);
+		expect(nodeIds(await drain(bus, village))).toEqual(["node0"]);
+		expect((await stats(bus, village)).queued).toBe(4);
 	});
 
-	it("reports queued and processed counters", () => {
-		const bus = createCommandBus(config({ maxCommandsPerFrame: 2 }));
-		bus.push(village, commands(5));
+	it("reports queued and processed counters", async () => {
+		const bus = await busOf({ maxCommandsPerFrame: 2 });
+		await push(bus, village, commands(5));
 
-		bus.drain(village);
-		bus.commit(village, 2);
+		await drain(bus, village);
+		await commit(bus, village, 2);
 
-		expect(bus.stats(village)).toEqual({
+		expect(await stats(bus, village)).toEqual({
 			queued: 3,
 			dropped: 0,
 			processed: 2,
 		});
 
-		bus.drain(village);
-		bus.commit(village, 2);
+		await drain(bus, village);
+		await commit(bus, village, 2);
 
-		expect(bus.stats(village)).toEqual({
+		expect(await stats(bus, village)).toEqual({
 			queued: 1,
 			dropped: 0,
 			processed: 4,
 		});
 	});
 
-	it("clears the queue once the batch does not fit", () => {
-		const onOverflow = vi.fn();
-		const bus = createCommandBus(config({ maxQueueLength: 3, onOverflow }));
-		bus.push(village, commands(2));
+	it("clears the queue once the batch does not fit", async () => {
+		const bus = await busOf({ maxQueueLength: 3 });
+		await push(bus, village, commands(2));
 
-		bus.push(village, commands(3, "overflow"));
+		const failure = await Effect.runPromiseExit(
+			bus.push(village, commands(3, "overflow")),
+		);
 
-		expect(bus.stats(village).queued).toBe(0);
-		expect(bus.stats(village).dropped).toBeGreaterThanOrEqual(2);
-		expect(bus.drain(village)).toEqual([]);
-		expect(onOverflow).toHaveBeenCalledTimes(1);
+		expect(failure._tag).toBe("Failure");
+		expect((await stats(bus, village)).queued).toBe(0);
+		expect((await stats(bus, village)).dropped).toBeGreaterThanOrEqual(2);
+		expect(await drain(bus, village)).toEqual([]);
+	});
 
-		const error = onOverflow.mock.calls[0]?.[0];
+	it("reports the overflow on the widget that overfilled", async () => {
+		const bus = await busOf({ maxQueueLength: 2 });
+
+		const error = await Effect.runPromise(bus.push(village, commands(5))).then(
+			() => null,
+			(reason: unknown) => reason,
+		);
+
 		expect(error).toBeInstanceOf(QueueOverflow);
 		expect((error as QueueOverflow).widgetId).toBe(village);
 	});
 
-	it("accepts commands again after an overflow", () => {
-		const bus = createCommandBus(config({ maxQueueLength: 2 }));
-		bus.push(village, commands(5));
+	it("accepts commands again after an overflow", async () => {
+		const bus = await busOf({ maxQueueLength: 2 });
+		await Effect.runPromiseExit(bus.push(village, commands(5)));
 
-		bus.push(village, commands(1, "after"));
+		await push(bus, village, commands(1, "after"));
 
-		expect(nodeIds(bus.drain(village))).toEqual(["after0"]);
+		expect(nodeIds(await drain(bus, village))).toEqual(["after0"]);
 	});
 
-	it("clears a queue without touching the counters", () => {
-		const bus = createCommandBus(config());
-		bus.push(village, commands(3));
-		bus.drain(village);
-		bus.commit(village, 3);
+	it("clears a queue without touching the counters", async () => {
+		const bus = await busOf();
+		await push(bus, village, commands(3));
+		await drain(bus, village);
+		await commit(bus, village, 3);
 
-		bus.push(village, commands(2, "pending"));
-		bus.clear(village);
+		await push(bus, village, commands(2, "pending"));
+		await Effect.runPromise(bus.clear(village));
 
-		expect(bus.stats(village)).toEqual({
+		expect(await stats(bus, village)).toEqual({
 			queued: 0,
 			dropped: 0,
 			processed: 3,
 		});
-		expect(bus.drain(village)).toEqual([]);
+		expect(await drain(bus, village)).toEqual([]);
 	});
 
-	it("ignores an empty batch", () => {
-		const bus = createCommandBus(config());
+	it("ignores an empty batch", async () => {
+		const bus = await busOf();
 
-		bus.push(village, []);
+		await push(bus, village, []);
 
-		expect(bus.stats(village)).toEqual({
+		expect(await stats(bus, village)).toEqual({
 			queued: 0,
 			dropped: 0,
 			processed: 0,
 		});
 	});
 
-	it("answers for a widget that never pushed anything", () => {
-		const bus = createCommandBus(config());
+	it("answers for a widget that never pushed anything", async () => {
+		const bus = await busOf();
 
-		expect(bus.drain(village)).toEqual([]);
-		expect(bus.stats(village)).toEqual({
+		expect(await drain(bus, village)).toEqual([]);
+		expect(await stats(bus, village)).toEqual({
 			queued: 0,
 			dropped: 0,
 			processed: 0,
 		});
 	});
 
-	it("does not count a command before the caller applies it", () => {
-		const bus = createCommandBus(config());
-		bus.push(village, commands(3));
+	it("does not count a command before the caller applies it", async () => {
+		const bus = await busOf();
+		await push(bus, village, commands(3));
 
-		expect(bus.drain(village)).toHaveLength(3);
-		expect(bus.stats(village).processed).toBe(0);
+		expect(await drain(bus, village)).toHaveLength(3);
+		expect((await stats(bus, village)).processed).toBe(0);
 
-		bus.commit(village, 2);
+		await commit(bus, village, 2);
 
-		expect(bus.stats(village).processed).toBe(2);
+		expect((await stats(bus, village)).processed).toBe(2);
 
-		bus.commit(village, 0);
+		await commit(bus, village, 0);
 
-		expect(bus.stats(village).processed).toBe(2);
+		expect((await stats(bus, village)).processed).toBe(2);
 	});
 
-	it("returns a shared empty list when the queue is empty", () => {
-		const bus = createCommandBus(config());
-		bus.push(village, commands(1));
-		bus.drain(village);
+	it("returns a shared empty list when the queue is empty", async () => {
+		const bus = await busOf();
+		await push(bus, village, commands(1));
+		await drain(bus, village);
 
-		expect(bus.drain(village)).toBe(bus.drain(village));
+		const first = await drain(bus, village);
+		const second = await drain(bus, village);
+
+		expect(first).toBe(second);
 	});
 
-	it("rejects an invalid configuration", () => {
-		expect(() => createCommandBus(config({ maxQueueLength: 0 }))).toThrow(
-			/maxQueueLength/,
+	it("rejects an invalid configuration", async () => {
+		await expect(
+			Effect.runPromise(createCommandBus(config({ maxQueueLength: 0 }))),
+		).rejects.toThrow(/maxQueueLength/);
+		await expect(
+			Effect.runPromise(createCommandBus(config({ maxCommandsPerFrame: -1 }))),
+		).rejects.toThrow(/maxCommandsPerFrame/);
+		await expect(
+			Effect.runPromise(createCommandBus(config({ maxCommandsPerFrame: 1.5 }))),
+		).rejects.toThrow(/maxCommandsPerFrame/);
+		await expect(
+			Effect.runPromise(createCommandBus(config({ maxDrainMs: -1 }))),
+		).rejects.toThrow(/maxDrainMs/);
+		await expect(
+			Effect.runPromise(createCommandBus(config({ maxDrainMs: Number.NaN }))),
+		).rejects.toThrow(/maxDrainMs/);
+	});
+
+	it("accepts a zero drain budget", async () => {
+		const bus = await busOf({ maxDrainMs: 0 });
+		await push(bus, village, commands(1));
+
+		expect(await drain(bus, village)).toHaveLength(1);
+	});
+
+	it("rejects committing a non-integer count", async () => {
+		const bus = await busOf();
+
+		await expect(Effect.runPromise(bus.commit(village, -1))).rejects.toThrow(
+			/applied/,
 		);
-		expect(() => createCommandBus(config({ maxCommandsPerFrame: -1 }))).toThrow(
-			/maxCommandsPerFrame/,
-		);
-		expect(() =>
-			createCommandBus(config({ maxCommandsPerFrame: 1.5 })),
-		).toThrow(/maxCommandsPerFrame/);
-		expect(() => createCommandBus(config({ maxDrainMs: -1 }))).toThrow(
-			/maxDrainMs/,
-		);
-		expect(() => createCommandBus(config({ maxDrainMs: Number.NaN }))).toThrow(
-			/maxDrainMs/,
+		await expect(Effect.runPromise(bus.commit(village, 1.5))).rejects.toThrow(
+			/applied/,
 		);
 	});
 
-	it("accepts a zero drain budget", () => {
-		const bus = createCommandBus(config({ maxDrainMs: 0 }));
-		bus.push(village, commands(1));
+	it("keeps a single queue when pushes run concurrently", async () => {
+		const bus = await busOf();
 
-		expect(bus.drain(village)).toHaveLength(1);
-	});
+		await Effect.runPromise(
+			Effect.all(
+				[
+					bus.push(village, commands(2, "left")),
+					bus.push(village, commands(2, "right")),
+				],
+				{ concurrency: "unbounded" },
+			),
+		);
 
-	it("rejects committing a non-integer count", () => {
-		const bus = createCommandBus(config());
-
-		expect(() => bus.commit(village, -1)).toThrow(/applied/);
-		expect(() => bus.commit(village, 1.5)).toThrow(/applied/);
+		expect((await stats(bus, village)).queued).toBe(4);
+		expect(await drain(bus, village)).toHaveLength(4);
 	});
 });

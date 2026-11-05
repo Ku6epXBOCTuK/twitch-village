@@ -4,6 +4,7 @@ import {
 	type ManifestLoadFailed,
 	PROTOCOL_VERSION,
 	type ProtocolMismatch,
+	type RenderCommand,
 	type ViewerEvent,
 	type WidgetCrashed,
 	type WidgetId,
@@ -15,6 +16,7 @@ import { createEffectRegistry } from "../effects/effect-registry";
 import {
 	Assets,
 	Clock,
+	CommandBuses,
 	Effects,
 	Manifests,
 	RenderTargets,
@@ -23,7 +25,7 @@ import {
 	Workers,
 } from "../live";
 import type { WidgetFrame } from "../loop/ticker";
-import { type CommandBus, createCommandBus } from "../queue/command-bus";
+import type { CommandBus } from "../queue/command-bus";
 import type { WidgetStatus } from "../status";
 import type { Viewport } from "../viewport";
 import { createWatchdog } from "./watchdog";
@@ -57,6 +59,7 @@ export type WidgetError =
 export type WidgetHostServices =
 	| Assets
 	| Clock
+	| CommandBuses
 	| Effects
 	| Manifests
 	| RenderTargets
@@ -158,6 +161,7 @@ export function createWidgetHost(
 		const workerFactory = yield* Workers;
 		const manifestLoader = yield* Manifests;
 		const clock = yield* Clock;
+		const commandBuses = yield* CommandBuses;
 
 		const watchdog = createWatchdog();
 		const id = descriptor.id;
@@ -177,16 +181,28 @@ export function createWidgetHost(
 
 		statusStore.register(id);
 
-		const commandBus = createCommandBus({
+		const commandBus = yield* commandBuses.create({
 			maxQueueLength: MAX_QUEUE_LENGTH,
 			maxCommandsPerFrame: MAX_COMMANDS_PER_FRAME,
 			maxDrainMs: MAX_DRAIN_MS,
-			onOverflow: (_) => {
-				const total = commandBus.stats(id).dropped;
-				statusStore.count(id, "dropped", total - reportedDropped);
-				reportedDropped = total;
-			},
 		});
+
+		const pushCommands = (commands: readonly RenderCommand[]) => {
+			Effect.runFork(
+				commandBus.push(id, commands).pipe(
+					Effect.catchTag("QueueOverflow", () =>
+						commandBus.stats(id).pipe(
+							Effect.flatMap(({ dropped }) =>
+								Effect.sync(() => {
+									statusStore.count(id, "dropped", dropped - reportedDropped);
+									reportedDropped = dropped;
+								}),
+							),
+						),
+					),
+				),
+			);
+		};
 
 		function transportToSend(): WorkerTransport | null {
 			return widgetIsAttached ? workerTransport : null;
@@ -218,7 +234,7 @@ export function createWidgetHost(
 			lastViewport = null;
 			pendingEvents.length = 0;
 			disposeTransport();
-			commandBus.clear(id);
+			Effect.runFork(commandBus.clear(id));
 		}
 
 		function markFailed() {
@@ -313,7 +329,7 @@ export function createWidgetHost(
 									Deferred.doneUnsafe(ready, Effect.succeed(undefined));
 								}),
 								Match.tag("Batch", ({ commands }) => {
-									commandBus.push(id, commands);
+									pushCommands(commands);
 								}),
 								Match.tag("Heartbeat", () => {
 									statusStore.count(id, "heartbeat");

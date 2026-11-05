@@ -24,7 +24,7 @@ export const runFrame = Effect.fnUntraced(function* (source: FrameSource) {
 	for (const frame of frames) {
 		const widgetId = frame.widgetId;
 		if (!statusStore.has(widgetId)) continue;
-		const commands = frame.bus.drain(widgetId);
+		const commands = yield* frame.bus.drain(widgetId);
 		const ctx = frame.context;
 
 		for (const command of commands) {
@@ -38,7 +38,7 @@ export const runFrame = Effect.fnUntraced(function* (source: FrameSource) {
 				statusStore.count(widgetId, "skipped", skipped);
 			}
 		}
-		frame.bus.commit(widgetId, commands.length);
+		yield* frame.bus.commit(widgetId, commands.length);
 
 		frame.ensureAlive();
 	}

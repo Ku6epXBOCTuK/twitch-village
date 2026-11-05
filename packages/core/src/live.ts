@@ -8,6 +8,7 @@ import { createPixiRenderTarget } from "./nodes/pixi-render-target";
 import type { RenderTarget } from "./nodes/render-target";
 import { createPixiApp } from "./pixi/create-app";
 import type { CoreAppOptions } from "./pixi/types";
+import { type CommandBusFactory, createCommandBus } from "./queue/command-bus";
 import type { StatusStore } from "./status";
 import type { Viewport } from "./viewport";
 import type { WorkerPort } from "./widget/worker-transport";
@@ -69,6 +70,15 @@ export class Viewports extends Context.Service<Viewports, ViewportSource>()(
 	"Viewports",
 ) {}
 
+export interface CommandBusFactoryService {
+	readonly create: CommandBusFactory;
+}
+
+export class CommandBuses extends Context.Service<
+	CommandBuses,
+	CommandBusFactoryService
+>()("CommandBuses") {}
+
 export function coreAppLayer(options: CoreAppOptions): Layer.Layer<CoreApp> {
 	return Layer.effect(
 		CoreApp,
@@ -87,7 +97,12 @@ export const renderTargetsLayer: Layer.Layer<RenderTargets> = Layer.succeed(
 	},
 );
 
-export type CoreServices = CoreApp | Clock | RenderTargets;
+export type CoreServices = CoreApp | Clock | CommandBuses | RenderTargets;
+
+export const commandBusesLayer: Layer.Layer<CommandBuses> = Layer.succeed(
+	CommandBuses,
+	{ create: createCommandBus },
+);
 
 export const workersLayer: Layer.Layer<Workers> = Layer.succeed(
 	Workers,
@@ -95,7 +110,12 @@ export const workersLayer: Layer.Layer<Workers> = Layer.succeed(
 );
 
 export function coreLive(options: CoreAppOptions): Layer.Layer<CoreServices> {
-	return Layer.mergeAll(coreAppLayer(options), clockLayer, renderTargetsLayer);
+	return Layer.mergeAll(
+		coreAppLayer(options),
+		clockLayer,
+		commandBusesLayer,
+		renderTargetsLayer,
+	);
 }
 
 export function createCoreRuntime(options: CoreAppOptions) {

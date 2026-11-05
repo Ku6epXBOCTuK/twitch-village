@@ -13,6 +13,7 @@ import type { EffectManifestLoader } from "../live";
 import {
 	Assets,
 	Clock,
+	CommandBuses,
 	Effects,
 	Manifests,
 	RenderTargets,
@@ -21,6 +22,7 @@ import {
 	Workers,
 } from "../live";
 import { createStatusStore } from "../status";
+import { createCommandBus } from "../queue/command-bus";
 import { callsOf, createFakeAssetBackend } from "../testing/fake-asset-backend";
 import { createFakeEffectCompiler } from "../testing/fake-effect-compiler";
 import { createFakeRenderTarget } from "../testing/fake-render-target";
@@ -92,6 +94,7 @@ const setup = async (
 	const layer = Layer.mergeAll(
 		Layer.succeed(Assets, { create: () => registry }),
 		Layer.succeed(Clock, { now: () => now }),
+		Layer.succeed(CommandBuses, { create: createCommandBus }),
 		Layer.succeed(Effects, compiler),
 		Layer.succeed(Manifests, manifests),
 		Layer.succeed(RenderTargets, { create: () => target }),
@@ -187,7 +190,7 @@ describe("WidgetHost", () => {
 			},
 		});
 
-		expect(host.bus.drain(widgetId)).toEqual([
+		expect(await Effect.runPromise(host.bus.drain(widgetId))).toEqual([
 			{ _tag: "CreateNode", nodeId: rootId, kind: "container" },
 		]);
 	});
@@ -325,9 +328,11 @@ describe("WidgetHost", () => {
 			});
 		}
 
-		expect(host.bus.stats(widgetId).dropped).toBeGreaterThan(0);
+		expect(
+			(await Effect.runPromise(host.bus.stats(widgetId))).dropped,
+		).toBeGreaterThan(0);
 		expect(host.status().counters.dropped).toBe(
-			host.bus.stats(widgetId).dropped,
+			(await Effect.runPromise(host.bus.stats(widgetId))).dropped,
 		);
 	});
 
@@ -350,12 +355,13 @@ describe("WidgetHost", () => {
 		};
 
 		overflow();
-		const firstDropped = host.bus.stats(widgetId).dropped;
+		const firstDropped = (await Effect.runPromise(host.bus.stats(widgetId)))
+			.dropped;
 		overflow();
 
 		expect(host.status().counters.dropped).toBe(firstDropped * 2);
 		expect(host.status().counters.dropped).toBe(
-			host.bus.stats(widgetId).dropped,
+			(await Effect.runPromise(host.bus.stats(widgetId))).dropped,
 		);
 	});
 
@@ -401,14 +407,14 @@ describe("WidgetHost", () => {
 				commands: [{ _tag: "CreateNode", nodeId: rootId, kind: "container" }],
 			},
 		});
-		expect(host.bus.stats(widgetId).queued).toBe(1);
+		expect((await Effect.runPromise(host.bus.stats(widgetId))).queued).toBe(1);
 
 		worker.emitError("boom");
 
 		expect(host.status().state).toBe("crashed");
 		expect(status.get(widgetId)?.state).toBe("crashed");
 		expect(target.root.visible).toBe(false);
-		expect(host.bus.stats(widgetId).queued).toBe(0);
+		expect((await Effect.runPromise(host.bus.stats(widgetId))).queued).toBe(0);
 	});
 
 	it("starts again after a crash and shows the container", async () => {

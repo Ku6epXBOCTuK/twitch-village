@@ -1,4 +1,4 @@
-﻿import { PROTOCOL_VERSION, type WidgetId } from "@tv/protocol";
+import { PROTOCOL_VERSION, type WidgetId } from "@tv/protocol";
 import { Deferred, Effect, Exit, Fiber, Layer } from "effect";
 import type { Application } from "pixi.js";
 import { Container } from "pixi.js";
@@ -9,6 +9,7 @@ import type { EffectManifestLoader } from "../live";
 import {
 	Assets,
 	Clock,
+	CommandBuses,
 	CoreApp,
 	Effects,
 	Manifests,
@@ -17,6 +18,7 @@ import {
 	Viewports,
 	Workers,
 } from "../live";
+import { createCommandBus } from "../queue/command-bus";
 import { createStatusStore } from "../status";
 import { createFakeAssetBackend } from "../testing/fake-asset-backend";
 import { createFakeEffectCompiler } from "../testing/fake-effect-compiler";
@@ -91,6 +93,7 @@ const setup = async (autoReady = true) => {
 			},
 		}),
 		Layer.succeed(Clock, { now: () => 0 }),
+		Layer.succeed(CommandBuses, { create: createCommandBus }),
 		Layer.succeed(Effects, createFakeEffectCompiler()),
 		Layer.succeed(Manifests, manifests),
 		Layer.succeed(RenderTargets, {

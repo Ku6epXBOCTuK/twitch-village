@@ -8,6 +8,7 @@ import { createAssetRegistry } from "../assets/asset-registry";
 import {
 	Assets,
 	Clock,
+	CommandBuses,
 	CoreApp,
 	Effects,
 	Manifests,
@@ -17,6 +18,7 @@ import {
 	Workers,
 } from "../live";
 import { runFrame } from "../loop/ticker";
+import { createCommandBus } from "../queue/command-bus";
 import { createStatusStore } from "../status";
 import { createFakeAssetBackend } from "../testing/fake-asset-backend";
 import { createFakeEffectCompiler } from "../testing/fake-effect-compiler";
@@ -84,6 +86,7 @@ const setup = async () => {
 			},
 		}),
 		Layer.succeed(Clock, { now: () => 0 }),
+		Layer.succeed(CommandBuses, { create: createCommandBus }),
 		Layer.succeed(Effects, createFakeEffectCompiler()),
 		Layer.succeed(Manifests, {
 			load: () => Effect.succeed({ effects: [] }),
@@ -227,10 +230,18 @@ describe("frame loop over the scene", () => {
 		send(villageId, browseCommand("avatar:2", 30, 40));
 
 		expect(manager.frames()).toHaveLength(1);
-		expect(manager.frames()[0]?.bus.stats(villageId).queued).toBe(4);
+		const bus = manager.frames()[0]?.bus;
+		expect(bus).toBeDefined();
+
+		const queued = async () =>
+			bus === undefined
+				? 0
+				: (await Effect.runPromise(bus.stats(villageId))).queued;
+
+		expect(await queued()).toBe(4);
 
 		await frame();
 
-		expect(manager.frames()[0]?.bus.stats(villageId).queued).toBe(0);
+		expect(await queued()).toBe(0);
 	});
 });

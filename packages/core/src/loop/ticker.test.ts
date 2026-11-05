@@ -1,10 +1,14 @@
-import type { NodeId, WidgetId } from "@tv/protocol";
+import type { NodeId, RenderCommand, WidgetId } from "@tv/protocol";
 import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import { createAssetRegistry } from "../assets/asset-registry";
 import { createEffectRegistry } from "../effects/effect-registry";
 import { Statuses } from "../live";
-import { type CommandBus, createCommandBus } from "../queue/command-bus";
+import {
+	type CommandBus,
+	type CommandBusStats,
+	createCommandBus,
+} from "../queue/command-bus";
 import { createStatusStore, type StatusStore } from "../status";
 import { createFakeAssetBackend } from "../testing/fake-asset-backend";
 import { createFakeEffectCompiler } from "../testing/fake-effect-compiler";
@@ -38,12 +42,14 @@ interface Harness {
 			readonly maxDrainMs?: number;
 			readonly now?: () => number;
 		},
-	) => {
+	) => Promise<{
 		readonly frame: WidgetFrame;
 		readonly target: ReturnType<typeof createFakeRenderTarget>;
 		readonly bus: CommandBus;
+		readonly push: (commands: readonly RenderCommand[]) => Promise<void>;
+		readonly stats: () => Promise<CommandBusStats>;
 		readonly alive: () => number;
-	};
+	}>;
 	readonly run: (frames: readonly WidgetFrame[]) => Promise<void>;
 	readonly runWith: (
 		store: StatusStore,
@@ -54,7 +60,7 @@ interface Harness {
 function setup(): Harness {
 	const store = createStatusStore({ now: () => 0 });
 
-	const widget = (
+	const widget = async (
 		widgetId: string,
 		options?: {
 			readonly maxCommandsPerFrame?: number;
@@ -70,13 +76,15 @@ function setup(): Harness {
 			widgetId: id,
 			compiler: createFakeEffectCompiler(),
 		});
-		const bus = createCommandBus({
-			maxQueueLength: MAX_QUEUE_LENGTH,
-			maxCommandsPerFrame:
-				options?.maxCommandsPerFrame ?? MAX_COMMANDS_PER_FRAME,
-			maxDrainMs: options?.maxDrainMs ?? MAX_DRAIN_MS,
-			...(options?.now === undefined ? {} : { now: options.now }),
-		});
+		const bus = await Effect.runPromise(
+			createCommandBus({
+				maxQueueLength: MAX_QUEUE_LENGTH,
+				maxCommandsPerFrame:
+					options?.maxCommandsPerFrame ?? MAX_COMMANDS_PER_FRAME,
+				maxDrainMs: options?.maxDrainMs ?? MAX_DRAIN_MS,
+				...(options?.now === undefined ? {} : { now: options.now }),
+			}),
+		);
 		let aliveCount = 0;
 
 		store.register(id);
@@ -92,6 +100,9 @@ function setup(): Harness {
 			},
 			target,
 			bus,
+			push: (commands: readonly RenderCommand[]) =>
+				Effect.runPromise(bus.push(id, commands)),
+			stats: () => Effect.runPromise(bus.stats(id)),
 			alive: () => aliveCount,
 		};
 	};
@@ -111,22 +122,22 @@ function setup(): Harness {
 describe("runFrame", () => {
 	it("applies queued commands and empties the queue", async () => {
 		const harness = setup();
-		const village = harness.widget("village");
-		village.bus.push("village" as WidgetId, [createNode("n1")]);
+		const village = await harness.widget("village");
+		await village.push([createNode("n1")]);
 
 		await harness.run([village.frame]);
 
 		expect(village.target.has("n1" as NodeId)).toBe(true);
-		expect(village.bus.stats("village" as WidgetId).queued).toBe(0);
-		expect(village.bus.stats("village" as WidgetId).processed).toBe(1);
+		expect((await village.stats()).queued).toBe(0);
+		expect((await village.stats()).processed).toBe(1);
 	});
 
 	it("records a failed command and still applies the next widget", async () => {
 		const harness = setup();
-		const broken = harness.widget("broken");
-		const healthy = harness.widget("healthy");
-		broken.bus.push("broken" as WidgetId, [setTransform("ghost")]);
-		healthy.bus.push("healthy" as WidgetId, [createNode("n1")]);
+		const broken = await harness.widget("broken");
+		const healthy = await harness.widget("healthy");
+		await broken.push([setTransform("ghost")]);
+		await healthy.push([createNode("n1")]);
 
 		await harness.run([broken.frame, healthy.frame]);
 
@@ -137,11 +148,9 @@ describe("runFrame", () => {
 
 	it("counts skipped commands when a batch exceeds the error budget", async () => {
 		const harness = setup();
-		const village = harness.widget("village");
+		const village = await harness.widget("village");
 		const commands = Array.from({ length: 20 }, () => setTransform("ghost"));
-		village.bus.push("village" as WidgetId, [
-			{ _tag: "Batch" as const, commands },
-		]);
+		await village.push([{ _tag: "Batch" as const, commands }]);
 
 		await harness.run([village.frame]);
 
@@ -150,7 +159,7 @@ describe("runFrame", () => {
 
 	it("checks the watchdog of a widget with an empty queue", async () => {
 		const harness = setup();
-		const village = harness.widget("village");
+		const village = await harness.widget("village");
 
 		await harness.run([village.frame]);
 
@@ -166,13 +175,13 @@ describe("runFrame", () => {
 
 	it("keeps the frame going when a render target throws", async () => {
 		const harness = setup();
-		const throwing = harness.widget("throwing");
-		const healthy = harness.widget("healthy");
+		const throwing = await harness.widget("throwing");
+		const healthy = await harness.widget("healthy");
 		throwing.target.createNode = () => {
 			throw new Error("pixi exploded");
 		};
-		throwing.bus.push("throwing" as WidgetId, [createNode("n1")]);
-		healthy.bus.push("healthy" as WidgetId, [createNode("n1")]);
+		await throwing.push([createNode("n1")]);
+		await healthy.push([createNode("n1")]);
 
 		await expect(
 			harness.run([throwing.frame, healthy.frame]),
@@ -185,15 +194,13 @@ describe("runFrame", () => {
 
 	it("commits the drained entries even when a batch skips the rest", async () => {
 		const harness = setup();
-		const village = harness.widget("village");
+		const village = await harness.widget("village");
 		const commands = Array.from({ length: 20 }, () => setTransform("ghost"));
-		village.bus.push("village" as WidgetId, [
-			{ _tag: "Batch" as const, commands },
-		]);
+		await village.push([{ _tag: "Batch" as const, commands }]);
 
 		await harness.run([village.frame]);
 
-		const stats = village.bus.stats("village" as WidgetId);
+		const stats = await village.stats();
 		expect(stats.queued).toBe(0);
 		expect(stats.processed).toBe(1);
 		expect(harness.store.get("village" as WidgetId)?.counters.skipped).toBe(4);
@@ -201,9 +208,9 @@ describe("runFrame", () => {
 
 	it("counts skipped commands from every batch as a delta", async () => {
 		const harness = setup();
-		const village = harness.widget("village");
+		const village = await harness.widget("village");
 		const commands = Array.from({ length: 20 }, () => setTransform("ghost"));
-		village.bus.push("village" as WidgetId, [
+		await village.push([
 			{ _tag: "Batch" as const, commands },
 			{ _tag: "Batch" as const, commands },
 		]);
@@ -223,8 +230,8 @@ describe("runFrame", () => {
 				harness.store.count(widgetId, name, by);
 			},
 		};
-		const village = harness.widget("village");
-		village.bus.push("village" as WidgetId, [createNode("n1")]);
+		const village = await harness.widget("village");
+		await village.push([createNode("n1")]);
 
 		await harness.runWith(spy, [village.frame]);
 
@@ -233,24 +240,20 @@ describe("runFrame", () => {
 
 	it("leaves the queue untouched when the widget has no status record", async () => {
 		const harness = setup();
-		const village = harness.widget("village");
-		village.bus.push("village" as WidgetId, [createNode("n1")]);
+		const village = await harness.widget("village");
+		await village.push([createNode("n1")]);
 		harness.store.remove("village" as WidgetId);
 
 		await expect(harness.run([village.frame])).resolves.toBeUndefined();
 
-		expect(village.bus.stats("village" as WidgetId).queued).toBe(1);
+		expect((await village.stats()).queued).toBe(1);
 		expect(village.target.calls).toHaveLength(0);
 	});
 
 	it("leaves the rest of the queue for the next frame when the per-frame limit is hit", async () => {
 		const harness = setup();
-		const village = harness.widget("village", { maxCommandsPerFrame: 2 });
-		village.bus.push("village" as WidgetId, [
-			createNode("n1"),
-			createNode("n2"),
-			createNode("n3"),
-		]);
+		const village = await harness.widget("village", { maxCommandsPerFrame: 2 });
+		await village.push([createNode("n1"), createNode("n2"), createNode("n3")]);
 
 		await harness.run([village.frame]);
 		expect(village.target.calls).toHaveLength(2);
@@ -262,18 +265,14 @@ describe("runFrame", () => {
 	it("leaves the rest of the queue for the next frame when the drain budget is spent", async () => {
 		const harness = setup();
 		let time = 0;
-		const village = harness.widget("village", {
+		const village = await harness.widget("village", {
 			maxDrainMs: 4,
 			now: () => {
 				time += 5;
 				return time;
 			},
 		});
-		village.bus.push("village" as WidgetId, [
-			createNode("n1"),
-			createNode("n2"),
-			createNode("n3"),
-		]);
+		await village.push([createNode("n1"), createNode("n2"), createNode("n3")]);
 
 		await harness.run([village.frame]);
 		expect(village.target.calls).toHaveLength(1);
@@ -284,11 +283,8 @@ describe("runFrame", () => {
 
 	it("applies commands in the order they were pushed", async () => {
 		const harness = setup();
-		const village = harness.widget("village");
-		village.bus.push("village" as WidgetId, [
-			createNode("n1"),
-			setTransform("n1"),
-		]);
+		const village = await harness.widget("village");
+		await village.push([createNode("n1"), setTransform("n1")]);
 
 		await harness.run([village.frame]);
 
@@ -300,12 +296,12 @@ describe("runFrame", () => {
 
 	it("does not notify status listeners during the frame", async () => {
 		const harness = setup();
-		const village = harness.widget("village");
+		const village = await harness.widget("village");
 		const seen: string[] = [];
 		harness.store.subscribe((status) => {
 			seen.push(status.widgetId);
 		});
-		village.bus.push("village" as WidgetId, [setTransform("ghost")]);
+		await village.push([setTransform("ghost")]);
 
 		await harness.run([village.frame]);
 		expect(seen).toEqual([]);
