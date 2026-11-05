@@ -10,7 +10,7 @@ import {
 	type WidgetId,
 	WidgetTimeout,
 } from "@tv/protocol";
-import { Deferred, Effect, Exit, Match } from "effect";
+import { Cause, Deferred, Effect, Exit, Match, Scope } from "effect";
 import type { Container } from "pixi.js";
 import { createEffectRegistry } from "../effects/effect-registry";
 import {
@@ -177,7 +177,9 @@ export function createWidgetHost(
 		let reportedDropped = 0;
 		let workerTransport: WorkerTransport | null = null;
 		let starting: Deferred.Deferred<void, WidgetError> | null = null;
-		let widgetIsAttached = false;
+		let activationScope: Scope.Closeable | null = null;
+
+		let phase: "idle" | "starting" | "active" = "idle";
 
 		statusStore.register(id);
 
@@ -205,7 +207,7 @@ export function createWidgetHost(
 		};
 
 		function transportToSend(): WorkerTransport | null {
-			return widgetIsAttached ? workerTransport : null;
+			return phase === "active" ? workerTransport : null;
 		}
 
 		function sendToWorker(message: ViewerEvent) {
@@ -221,26 +223,31 @@ export function createWidgetHost(
 			}
 		}
 
-		function disposeTransport() {
-			if (workerTransport !== null) {
-				workerTransport.transport.send(createDisposeEvent());
-				workerTransport.dispose();
-				workerTransport = null;
-			}
-		}
+		function closeActivation(): Effect.Effect<void> {
+			return Effect.gen(function* () {
+				phase = "idle";
+				lastViewport = null;
+				pendingEvents.length = 0;
+				yield* commandBus.clear(id);
 
-		function reset() {
-			widgetIsAttached = false;
-			lastViewport = null;
-			pendingEvents.length = 0;
-			disposeTransport();
-			Effect.runFork(commandBus.clear(id));
+				const scope = activationScope;
+				activationScope = null;
+				if (scope !== null) {
+					yield* Scope.close(scope, Exit.void);
+				}
+			});
 		}
 
 		function markFailed() {
 			statusStore.setState(id, "crashed");
 			target.root.visible = false;
-			reset();
+		}
+
+		function failActivation(): Effect.Effect<void> {
+			return Effect.gen(function* () {
+				markFailed();
+				yield* closeActivation();
+			});
 		}
 
 		function clearScene() {
@@ -254,12 +261,8 @@ export function createWidgetHost(
 			);
 		}
 
-		const unloadAssets = assetRegistry
-			.unloadBundle(descriptor.assetBundle)
-			.pipe(Effect.ignore());
-
 		const ensureAlive = () => {
-			if (!widgetIsAttached) return;
+			if (phase !== "active") return;
 			if (!watchdog.overdue(clock.now())) return;
 
 			statusStore.recordError(
@@ -270,6 +273,7 @@ export function createWidgetHost(
 				}),
 			);
 			markFailed();
+			Effect.runFork(closeActivation());
 		};
 
 		return {
@@ -280,68 +284,104 @@ export function createWidgetHost(
 			start: () =>
 				Effect.onExit(
 					Effect.gen(function* () {
-						if (workerTransport !== null) {
+						if (phase === "active") return;
+						if (phase === "starting") {
+							const previousGate = starting;
+							if (previousGate !== null) {
+								yield* Deferred.await(previousGate);
+							}
 							return;
 						}
-						if (starting !== null) {
-							yield* Deferred.await(starting);
-							return;
-						}
+						phase = "starting";
 						const gate = Deferred.makeUnsafe<void, WidgetError>();
 						starting = gate;
 
-						yield* clearScene();
-						statusStore.setState(id, "loading");
-
 						const ready = yield* Deferred.make<void, WidgetError>();
 
-						const stage = Effect.gen(function* () {
-							yield* assetRegistry.loadBundle(descriptor.assetBundle);
-							if (descriptor.effectsManifest !== undefined) {
-								const manifest = yield* manifestLoader.load(
-									descriptor.effectsManifest,
+						statusStore.setState(id, "loading");
+
+						activationScope = yield* Scope.make();
+
+						yield* Scope.provide(
+							Effect.gen(function* () {
+								yield* Effect.acquireRelease(
+									assetRegistry.loadBundle(descriptor.assetBundle),
+									() =>
+										Effect.gen(function* () {
+											yield* assetRegistry
+												.unloadBundle(descriptor.assetBundle)
+												.pipe(Effect.ignore());
+										}),
 								);
-								effectRegistry.register(manifest);
-							}
-						});
 
-						const cleanup = Effect.gen(function* () {
-							yield* unloadAssets;
-							markFailed();
-						});
-
-						yield* stage.pipe(Effect.onError(() => cleanup));
-						target.root.visible = true;
-
-						const worker = workerFactory(descriptor.workerUrl);
-						workerTransport = createWorkerTransport({
-							worker,
-							widgetId: id,
-							onFailure: function (error: WorkerTransportFailure): void {
-								if (!Deferred.doneUnsafe(ready, Effect.fail(error))) {
-									markFailed();
+								if (descriptor.effectsManifest !== undefined) {
+									const manifest = yield* manifestLoader.load(
+										descriptor.effectsManifest,
+									);
+									effectRegistry.register(manifest);
 								}
-							},
-						});
-						workerTransport.transport.subscribe(({ message }) => {
-							Match.value(message).pipe(
-								Match.tag("Ready", () => {
-									Deferred.doneUnsafe(ready, Effect.succeed(undefined));
-								}),
-								Match.tag("Batch", ({ commands }) => {
-									pushCommands(commands);
-								}),
-								Match.tag("Heartbeat", () => {
-									statusStore.count(id, "heartbeat");
-									watchdog.beat(clock.now());
-								}),
-							);
-						});
 
-						const viewport = viewportSource();
-						workerTransport.transport.send(
-							createInitEvent(id, viewport, descriptor.config),
+								yield* Effect.acquireRelease(
+									Effect.gen(function* () {
+										const worker = workerFactory(descriptor.workerUrl);
+										const transport = createWorkerTransport({
+											worker,
+											widgetId: id,
+											onFailure: (error: WorkerTransportFailure) => {
+												if (!Deferred.doneUnsafe(ready, Effect.fail(error))) {
+													markFailed();
+													Effect.runFork(closeActivation());
+												}
+											},
+										});
+										transport.transport.subscribe(({ message }) => {
+											Match.value(message).pipe(
+												Match.tag("Ready", () => {
+													Deferred.doneUnsafe(ready, Effect.succeed(undefined));
+												}),
+												Match.tag("Batch", ({ commands }) => {
+													pushCommands(commands);
+												}),
+												Match.tag("Heartbeat", () => {
+													statusStore.count(id, "heartbeat");
+													watchdog.beat(clock.now());
+												}),
+											);
+										});
+										const viewport = viewportSource();
+										transport.transport.send(
+											createInitEvent(id, viewport, descriptor.config),
+										);
+										workerTransport = transport;
+										return transport;
+									}),
+									(transport) =>
+										Effect.sync(() => {
+											transport.transport.send(createDisposeEvent());
+											transport.dispose();
+											if (workerTransport === transport) workerTransport = null;
+										}),
+								);
+
+								yield* Effect.addFinalizer(() => clearScene());
+							}),
+							activationScope,
+						).pipe(
+							Effect.onExit((exit) => {
+								if (Exit.isSuccess(exit)) return Effect.void;
+								if (Cause.hasInterruptsOnly(exit.cause)) {
+									const scope = activationScope;
+									activationScope = null;
+									if (scope !== null) {
+										return Scope.close(scope, Exit.void);
+									}
+									return Effect.void;
+								}
+								return failActivation();
+							}),
 						);
+
+						target.root.visible = true;
 
 						yield* Deferred.await(ready).pipe(
 							Effect.timeoutOrElse({
@@ -354,15 +394,13 @@ export function createWidgetHost(
 										}),
 									),
 							}),
-							Effect.onError(() => Effect.sync(markFailed)),
+							Effect.onError(() => failActivation()),
 						);
 
-						if (workerTransport === null) {
-							return;
-						}
+						if (phase !== "starting") return;
 						watchdog.reset(clock.now());
 						statusStore.setState(id, "active");
-						widgetIsAttached = true;
+						phase = "active";
 						if (lastViewport !== null) {
 							const transport = transportToSend();
 							if (transport !== null) {
@@ -388,9 +426,8 @@ export function createWidgetHost(
 				),
 			stop: () =>
 				Effect.gen(function* () {
-					reset();
-					yield* clearScene();
-					yield* unloadAssets;
+					yield* closeActivation();
+
 					statusStore.setState(id, "loading");
 				}),
 			onCoreEvent: (event) => {
@@ -405,7 +442,7 @@ export function createWidgetHost(
 				}
 			},
 			pause: () => {
-				if (widgetIsAttached && !watchdog.paused) {
+				if (phase === "active" && !watchdog.paused) {
 					watchdog.pause();
 					statusStore.setState(id, "paused");
 					const transport = transportToSend();
@@ -415,7 +452,7 @@ export function createWidgetHost(
 				}
 			},
 			resume: () => {
-				if (widgetIsAttached && watchdog.paused) {
+				if (phase === "active" && watchdog.paused) {
 					watchdog.resume(clock.now());
 					statusStore.setState(id, "active");
 					const transport = transportToSend();
