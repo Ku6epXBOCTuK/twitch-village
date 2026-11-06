@@ -107,10 +107,10 @@ URL источника: `http://localhost:4173/?widgets=pizdudes`.
    `ASSET_BUNDLE` в виджете должен совпадать с именем бандла.
 
 4. **Эффекты.** Если нужны фильтры, добавить `effectsManifest` в дескриптор:
-   JSON `{effects: [{effectId, vertex, fragment, params}]}`. Команды
-   `AddFilter`, `SetFilterParam`, `RemoveFilter` ссылаются на `effectId`.
-   Production-компилятор эффектов пока не подключён, поэтому фильтры в overlay
-   не отрисуются до отдельной задачи (TV-63).
+   JSON `{effects: [{effectId, vertex, fragment, params}]}`. Пустой `vertex`
+   означает стандартный вершинный шейдер Pixi. Команды `AddFilter`,
+   `SetFilterParam`, `RemoveFilter` ссылаются на `effectId`. Overlay копирует
+   `effects.json` пакета в `public/`, рядом с общим `manifest.json`.
 
 5. **Регистрация в overlay.** Добавить пакет в зависимости
    `apps/overlay/package.json`, импортировать константы и

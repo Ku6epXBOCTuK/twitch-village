@@ -1,5 +1,6 @@
 import {
 	type CoreToWidget,
+	type EffectId,
 	type LeafCommand,
 	type NodeId,
 	PROTOCOL_VERSION,
@@ -62,6 +63,8 @@ const shipHeight = (ship: Ship): number =>
 	shipCellSize(ship.skin).height * SHIP_SCALE;
 
 const wordWidth = (text: string): number => Math.max(60, text.length * 16);
+
+const AURA_EFFECT = "aura" as EffectId;
 
 const createScene = (): LeafCommand[] => [
 	{ _tag: "CreateNode", nodeId: sceneId, kind: "container" },
@@ -355,6 +358,7 @@ export function createShootingWordsWidget(
 	let tickTimer: ReturnType<typeof setInterval> | undefined;
 	let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
 	const armedWords = new Set<number>();
+	const auraShips = new Set<number>();
 	const barBuckets = new Map<number, number>();
 	const unsubscribe = transport.subscribe((envelope) => {
 		if (envelope.protocolVersion !== PROTOCOL_VERSION) return;
@@ -425,6 +429,7 @@ export function createShootingWordsWidget(
 	};
 
 	const removeShipNode = (shipId: number): void => {
+		auraShips.delete(shipId);
 		sendCommands([{ _tag: "RemoveNode", nodeId: shipNode(shipId) }]);
 	};
 
@@ -436,7 +441,7 @@ export function createShootingWordsWidget(
 
 	const updateHp = (ship: Ship): void => {
 		const barWidth = Math.max(24, shipWidth(ship));
-		sendCommands([
+		const commands: LeafCommand[] = [
 			{
 				_tag: "SetRectStyle",
 				nodeId: shipHpNode(ship.id),
@@ -445,7 +450,34 @@ export function createShootingWordsWidget(
 				radius: 2,
 				fill: ship.hp <= 3 ? "#ef4444" : "#22c55e",
 			},
-		]);
+		];
+		const wantsAura = ship.hp <= 3 && !ship.dead;
+		const hasAura = auraShips.has(ship.id);
+		if (wantsAura) {
+			if (!hasAura) {
+				auraShips.add(ship.id);
+				commands.push({
+					_tag: "AddFilter",
+					nodeId: shipSpriteNode(ship.id),
+					effectId: AURA_EFFECT,
+				});
+			}
+			commands.push({
+				_tag: "SetFilterParam",
+				nodeId: shipSpriteNode(ship.id),
+				effectId: AURA_EFFECT,
+				param: "uIntensity",
+				value: 0.4 + (3 - ship.hp) * 0.15,
+			});
+		} else if (hasAura) {
+			auraShips.delete(ship.id);
+			commands.push({
+				_tag: "RemoveFilter",
+				nodeId: shipSpriteNode(ship.id),
+				effectId: AURA_EFFECT,
+			});
+		}
+		sendCommands(commands);
 	};
 
 	const ensureShip = (
@@ -599,6 +631,7 @@ export function createShootingWordsWidget(
 				world = createWorld(message.viewport.w, message.viewport.h, seed);
 				initialized = true;
 				paused = false;
+				auraShips.clear();
 				send({
 					_tag: "Ready",
 					widgetId: message.widgetId,

@@ -9,6 +9,7 @@ import {
 	EffectManifestSchema,
 	type EffectManifest,
 } from "./effects/effect-manifest";
+import { createPixiEffectCompiler } from "./effects/pixi-effect-compiler";
 import type { EffectCompiler } from "./effects/effect-registry";
 import { createPixiRenderTarget } from "./nodes/pixi-render-target";
 import type { RenderTarget } from "./nodes/render-target";
@@ -143,11 +144,10 @@ export const viewportsLayer: Layer.Layer<Viewports, never, CoreApp> =
 		})),
 	);
 
-export const effectsLayer: Layer.Layer<Effects> = Layer.succeed(Effects, {
-	compile: () => {
-		throw new Error("Effect compiler is not wired yet");
-	},
-});
+export const effectsLayer: Layer.Layer<Effects> = Layer.succeed(
+	Effects,
+	createPixiEffectCompiler(),
+);
 
 export const manifestsLayer: Layer.Layer<Manifests> = Layer.succeed(Manifests, {
 	load: (url) =>

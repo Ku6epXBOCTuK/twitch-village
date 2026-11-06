@@ -1,0 +1,23 @@
+{
+	"effects": [
+		{
+			"effectId": "aura",
+			"vertex": "",
+			"fragment": "in vec2 vTextureCoord;\nout vec4 finalColor;\nuniform sampler2D uTexture;\nuniform float uIntensity;\nuniform vec3 uColor;\nvoid main(void) {\n  vec4 color = texture(uTexture, vTextureCoord);\n  float glow = color.a * uIntensity;\n  finalColor = vec4(color.rgb + uColor * glow, color.a);\n}",
+			"params": [
+				{
+					"type": "number",
+					"name": "uIntensity",
+					"min": 0,
+					"max": 1,
+					"default": 0.65
+				},
+				{
+					"type": "vec3",
+					"name": "uColor",
+					"default": [1, 0.2, 0.15]
+				}
+			]
+		}
+	]
+}

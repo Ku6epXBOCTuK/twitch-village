@@ -23,6 +23,11 @@ for (const name of packages) {
 	});
 }
 
+await cp(
+	join(workspace, "packages", "widget-shooting-words", "effects.json"),
+	join(publicDir, "effects.json"),
+);
+
 await writeFile(
 	join(publicDir, "manifest.json"),
 	`${JSON.stringify({ bundles }, null, 2)}\n`,

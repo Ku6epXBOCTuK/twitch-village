@@ -74,9 +74,10 @@
 **`shooting-word-v2`** (SvelteKit + Pixi 8, ~180 файлов, но виджет — это
 `src/lib/game/*` и `src/lib/vfx/*`). Пакет `@tv/widget-shooting-words` собран:
 слова и корабли через `rect` + `SetText`, HP и полоски как квады, 217 кадров 20
-скинов из assetpack, тесты на `DirectTransport`. VFX (`aura`, `shield`,
-`overcharge`, `coating`, `shimmer`) в v1 не перенесены: компилятор эффектов не
-подключён. Сервер (авторизация, раунды, награды, SQLite) в виджет не входит. В
+скинов из assetpack, тесты на `DirectTransport`. Production-компилятор эффектов
+подключён: `effects.json` описывает `aura`, корабль с HP ≤ 3 получает свечение.
+`shield`, `overcharge`, `coating`, `shimmer` не перенесены: в виджете нет их
+состояния. Сервер (авторизация, раунды, награды, SQLite) в виджет не входит. В
 overlay включён через общий манифест вместе с pizdudes.
 
 ## 4. Порядок порта

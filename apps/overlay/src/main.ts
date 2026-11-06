@@ -77,6 +77,7 @@ async function main(): Promise<void> {
 			id: SHOOTING_WORDS_WIDGET_ID,
 			workerUrl: new URL(shootingWordsWorkerUrl, import.meta.url),
 			assetBundle: SHOOTING_WORDS_ASSET_BUNDLE,
+			effectsManifest: new URL("/effects.json", window.location.href),
 			config: { debug: config.debug },
 		},
 	];

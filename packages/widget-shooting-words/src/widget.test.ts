@@ -111,6 +111,49 @@ describe("shooting words widget", () => {
 		).toBe(true);
 	});
 
+	it("adds an aura filter when a ship drops to low hp", () => {
+		harness.send({
+			_tag: "ViewerEvent",
+			event: {
+				_tag: "ViewerJoined",
+				viewerId,
+				displayName: "Mira",
+				color: "#60a5fa",
+			},
+		});
+		const world = harness.widget.world;
+		if (world === null) throw new Error("world is not initialized");
+		const ship = world.ships.values().next().value;
+		if (ship === undefined) throw new Error("ship was not spawned");
+
+		for (let index = 0; index < 8; index += 1) {
+			const id = 100 + index;
+			world.shots.set(id, {
+				id,
+				targetShipId: ship.id,
+				damage: 1,
+				x: ship.x,
+				y: ship.y,
+			});
+		}
+		harness.clear();
+		harness.widget.tick(16);
+
+		expect(ship.hp).toBe(2);
+		expect(harness.commands()).toContainEqual({
+			_tag: "AddFilter",
+			nodeId: "sw-ship-1-sprite",
+			effectId: "aura",
+		});
+		expect(harness.commands()).toContainEqual({
+			_tag: "SetFilterParam",
+			nodeId: "sw-ship-1-sprite",
+			effectId: "aura",
+			param: "uIntensity",
+			value: 0.55,
+		});
+	});
+
 	it("spawns a word and shoots it on a matching message", () => {
 		harness.widget.tick(4000);
 		const word = harness.widget.world?.words.values().next().value;

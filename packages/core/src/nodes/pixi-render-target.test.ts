@@ -1,6 +1,13 @@
-import { type NodeId, UnknownNode, type WidgetId } from "@tv/protocol";
+import {
+	type EffectId,
+	type NodeId,
+	UnknownNode,
+	type WidgetId,
+} from "@tv/protocol";
 import { Container, Graphics, Texture } from "pixi.js";
 import { describe, expect, it, vi } from "vitest";
+import type { EffectDefinition } from "../effects/effect-manifest";
+import { createPixiEffectCompiler } from "../effects/pixi-effect-compiler";
 import { createPixiRenderTarget } from "./pixi-render-target";
 import { describeRenderTargetContract } from "./render-target.contract";
 
@@ -10,6 +17,7 @@ const asNodeId = (value: string): NodeId => value as NodeId;
 Object.assign(globalThis, {
 	cancelAnimationFrame: () => {},
 	requestAnimationFrame: () => 0,
+	document: { createElement: () => ({ getContext: () => null }) },
 });
 
 describeRenderTargetContract("PixiRenderTarget", (widgetId: WidgetId) =>
@@ -40,6 +48,41 @@ describe("PixiRenderTarget", () => {
 			error = cause;
 		}
 		expect(error).toBeInstanceOf(UnknownNode);
+	});
+
+	it("writes filter params into the Pixi 8 resource group", () => {
+		const target = createPixiRenderTarget({ widgetId: "village" as WidgetId });
+		const nodeId = asNodeId("ship");
+		const effectId = "aura" as EffectId;
+		const filter = createPixiEffectCompiler().compile({
+			effectId,
+			vertex: "",
+			fragment: `
+				in vec2 vTextureCoord;
+				out vec4 finalColor;
+				uniform sampler2D uTexture;
+				uniform float uIntensity;
+				void main() {
+					finalColor = texture(uTexture, vTextureCoord);
+					finalColor.rgb *= uIntensity;
+				}
+			`,
+			params: [
+				{ type: "number", name: "uIntensity", min: 0, max: 1, default: 0.5 },
+			],
+		} satisfies EffectDefinition);
+		target.createNode(nodeId, "sprite");
+		target.addFilter(nodeId, effectId, filter);
+
+		target.setFilterParam(nodeId, effectId, "uIntensity", 0.25);
+
+		const uniforms = (
+			filter.resources.uniforms as {
+				uniforms: Record<string, unknown>;
+			}
+		).uniforms;
+		expect(uniforms.uIntensity).toBe(0.25);
+		filter.destroy();
 	});
 
 	it("moves the view back under the root when the parent is null", () => {
