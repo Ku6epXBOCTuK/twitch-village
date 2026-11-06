@@ -18,6 +18,7 @@ export interface DebugPanel {
 
 interface DebugViewer {
 	readonly id: ViewerId;
+	readonly login: string;
 	readonly name: string;
 	readonly color: string;
 }
@@ -78,6 +79,7 @@ export function createDebugPanel(options: DebugPanelOptions): DebugPanel {
 		serial += 1;
 		const viewer: DebugViewer = {
 			id: `debug-${serial}` as ViewerId,
+			login: `debug_${serial}`,
 			name: `Зритель ${serial}`,
 			color: COLORS[(serial - 1) % COLORS.length] ?? "#60a5fa",
 		};
@@ -103,8 +105,10 @@ export function createDebugPanel(options: DebugPanelOptions): DebugPanel {
 		options.source.emit({
 			_tag: "ViewerMessage",
 			viewerId: viewer.id,
+			login: viewer.login,
 			text: `сообщение ${serial}`,
 			isCommand: false,
+			isMod: false,
 		});
 	};
 

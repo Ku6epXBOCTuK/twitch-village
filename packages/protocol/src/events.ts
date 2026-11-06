@@ -12,8 +12,10 @@ export const ViewerJoined = Schema.TaggedStruct("ViewerJoined", {
 
 export const ViewerMessage = Schema.TaggedStruct("ViewerMessage", {
 	viewerId: ViewerId,
+	login: Schema.NonEmptyString,
 	text: Schema.NonEmptyString,
 	isCommand: Schema.Boolean,
+	isMod: Schema.Boolean,
 });
 
 export const ViewerGift = Schema.TaggedStruct("ViewerGift", {

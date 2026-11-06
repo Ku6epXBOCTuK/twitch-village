@@ -19,6 +19,7 @@ export interface ViewerEventSource {
 
 interface MockViewer {
 	readonly id: ViewerId;
+	readonly login: string;
 	readonly displayName: string;
 	readonly color: string;
 }
@@ -155,8 +156,10 @@ export class MockEventSource implements ViewerEventSource {
 			return {
 				_tag: "ViewerMessage",
 				viewerId: viewer.id,
+				login: viewer.login,
 				text,
 				isCommand: text.startsWith("!"),
+				isMod: false,
 			};
 		}
 
@@ -188,6 +191,7 @@ export class MockEventSource implements ViewerEventSource {
 			case "ViewerJoined":
 				this.viewers.set(event.viewerId, {
 					id: event.viewerId,
+					login: event.displayName.toLowerCase().replace(/\s+/g, "_"),
 					displayName: event.displayName,
 					color: event.color ?? "#60a5fa",
 				});

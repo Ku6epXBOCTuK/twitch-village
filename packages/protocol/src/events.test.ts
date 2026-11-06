@@ -80,8 +80,22 @@ describe("ViewerEventSchema", () => {
 				color: "#ff00aa",
 			},
 			{ _tag: "ViewerJoined", viewerId, displayName: "Ку6ep" },
-			{ _tag: "ViewerMessage", viewerId, text: "привет", isCommand: false },
-			{ _tag: "ViewerMessage", viewerId, text: "!sounds", isCommand: true },
+			{
+				_tag: "ViewerMessage",
+				viewerId,
+				login: "ku6ep",
+				text: "привет",
+				isCommand: false,
+				isMod: false,
+			},
+			{
+				_tag: "ViewerMessage",
+				viewerId,
+				login: "ku6ep",
+				text: "!sounds",
+				isCommand: true,
+				isMod: true,
+			},
 			{ _tag: "ViewerGift", viewerId, amount: 100, kind: "bits" },
 			{ _tag: "ViewerGift", viewerId, amount: 1, kind: "sub" },
 			{ _tag: "ViewerGift", viewerId, amount: 5, kind: "giftSub" },
@@ -122,7 +136,23 @@ describe("ViewerEventSchema", () => {
 	});
 
 	it("rejects an empty message", () => {
-		viewer.expectInvalid({ _tag: "ViewerMessage", viewerId, text: "" });
+		viewer.expectInvalid({
+			_tag: "ViewerMessage",
+			viewerId,
+			login: "ku6ep",
+			text: "",
+			isCommand: false,
+			isMod: false,
+		});
+	});
+
+	it("rejects a message without login or isMod", () => {
+		viewer.expectInvalid({
+			_tag: "ViewerMessage",
+			viewerId,
+			text: "привет",
+			isCommand: false,
+		});
 	});
 
 	it("rejects gift kinds outside bits, sub, giftSub", () => {
@@ -265,8 +295,10 @@ describe("envelopes", () => {
 				event: {
 					_tag: "ViewerMessage",
 					viewerId,
+					login: "ku6ep",
 					text: "hi",
 					isCommand: false,
+					isMod: false,
 				},
 			},
 		};
