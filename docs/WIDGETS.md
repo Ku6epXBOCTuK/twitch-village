@@ -68,8 +68,8 @@
 **`pizdudes-test`** (Pixi 8, ECS, ~40 файлов). Порт: манифест, worker-entry,
 `systems/render.ts` → команды, лист повара в 64 `assetId` (8 направлений × 8
 кадров), 13 станций по одному, пол спрайтом, бейджи через `rect`, `fps 15`.
-Пакет `@tv/widget-pizdudes` собран и покрыт тестами; активируется в overlay
-через общий манифест.
+Пакет `@tv/widget-pizdudes` собран, покрыт тестами и включён в overlay через
+общий манифест.
 
 **`shooting-word-v2`** (SvelteKit + Pixi 8, ~180 файлов, но виджет — это
 `src/lib/game/*` и `src/lib/vfx/*`). Пакет `@tv/widget-shooting-words` собран:
@@ -77,7 +77,7 @@
 скинов из assetpack, тесты на `DirectTransport`. VFX (`aura`, `shield`,
 `overcharge`, `coating`, `shimmer`) в v1 не перенесены: компилятор эффектов не
 подключён. Сервер (авторизация, раунды, награды, SQLite) в виджет не входит. В
-overlay включается через общий манифест вместе с pizdudes.
+overlay включён через общий манифест вместе с pizdudes.
 
 ## 4. Порядок порта
 
