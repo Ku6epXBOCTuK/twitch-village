@@ -1,6 +1,7 @@
 import {
 	type AssetId,
 	AssetNotFound,
+	type BundleId,
 	BundleLoadFailed,
 	BundleLoadTimeout,
 	BundleUnloadFailed,
@@ -20,8 +21,8 @@ import type { AssetManifest } from "./manifest";
 
 export interface AssetBackend {
 	init(manifest: AssetManifest): Promise<void>;
-	loadBundle(bundleId: string): Promise<void>;
-	unloadBundle(bundleId: string): Promise<void>;
+	loadBundle(bundleId: BundleId): Promise<void>;
+	unloadBundle(bundleId: BundleId): Promise<void>;
 	get(assetId: AssetId): Texture | undefined;
 }
 
@@ -39,11 +40,11 @@ export interface AssetRegistry {
 	init(manifest: AssetManifest): Effect.Effect<void>;
 	// NOTE: loading is idempotent and a rejected load leaves the bundle
 	// unloaded, so a retry starts from a clean flag.
-	loadBundle(bundleId: string): Effect.Effect<void, BundleLoadError>;
+	loadBundle(bundleId: BundleId): Effect.Effect<void, BundleLoadError>;
 	unloadBundle(
-		bundleId: string,
+		bundleId: BundleId,
 	): Effect.Effect<void, BundleLoadError | BundleUnloadFailed>;
-	isLoaded(bundleId: string): boolean;
+	isLoaded(bundleId: BundleId): boolean;
 	// NOTE: resolution goes through the backend on every call; the registry
 	// keeps no texture map of its own.
 	getTexture(assetId: AssetId): Effect.Effect<Texture, AssetNotFound>;
@@ -73,7 +74,7 @@ type LoadDecision =
 			readonly deferred: Deferred.Deferred<void, BundleLoadError>;
 	  };
 
-type LoadUpdate = readonly [LoadDecision, Map<string, BundleEntry>];
+type LoadUpdate = readonly [LoadDecision, Map<BundleId, BundleEntry>];
 
 export function createAssetRegistry(
 	options: AssetRegistryOptions,
@@ -86,8 +87,8 @@ export function createAssetRegistry(
 	);
 	let initPromise: Promise<void> | undefined;
 	let initialized = false;
-	const aliasToBundleMap = new Map<AssetId, string>();
-	const loading = SynchronizedRef.makeUnsafe(new Map<string, BundleEntry>());
+	const aliasToBundleMap = new Map<AssetId, BundleId>();
+	const loading = SynchronizedRef.makeUnsafe(new Map<BundleId, BundleEntry>());
 
 	function assetNotFound(assetId: AssetId, message: string): AssetNotFound {
 		return new AssetNotFound({
@@ -97,7 +98,7 @@ export function createAssetRegistry(
 		});
 	}
 
-	function loadFailed(bundleId: string, cause: unknown): BundleLoadFailed {
+	function loadFailed(bundleId: BundleId, cause: unknown): BundleLoadFailed {
 		return new BundleLoadFailed({
 			widgetId: options.widgetId,
 			bundleId,
@@ -105,7 +106,7 @@ export function createAssetRegistry(
 		});
 	}
 
-	function loadTimeout(bundleId: string): BundleLoadTimeout {
+	function loadTimeout(bundleId: BundleId): BundleLoadTimeout {
 		const timeoutMs = options.timeoutMs ?? 0;
 		return new BundleLoadTimeout({
 			widgetId: options.widgetId,
@@ -115,7 +116,10 @@ export function createAssetRegistry(
 		});
 	}
 
-	function unloadFailed(bundleId: string, cause: unknown): BundleUnloadFailed {
+	function unloadFailed(
+		bundleId: BundleId,
+		cause: unknown,
+	): BundleUnloadFailed {
 		return new BundleUnloadFailed({
 			widgetId: options.widgetId,
 			bundleId,
@@ -144,7 +148,7 @@ export function createAssetRegistry(
 	}
 
 	function settleLoad(
-		bundleId: string,
+		bundleId: BundleId,
 		deferred: Deferred.Deferred<void, BundleLoadError>,
 		exit: Exit.Exit<void, BundleLoadError>,
 	): Effect.Effect<void> {
@@ -163,7 +167,7 @@ export function createAssetRegistry(
 	}
 
 	function runLoad(
-		bundleId: string,
+		bundleId: BundleId,
 		deferred: Deferred.Deferred<void, BundleLoadError>,
 	): Effect.Effect<void, BundleLoadError> {
 		const attempt = Effect.tryPromise({
@@ -192,7 +196,7 @@ export function createAssetRegistry(
 				const promise = initPromise ?? startInit(manifest);
 				return Effect.promise(() => promise);
 			}),
-		loadBundle: (bundleId: string) =>
+		loadBundle: (bundleId: BundleId) =>
 			Effect.gen(function* () {
 				const decision = yield* SynchronizedRef.modifyEffect(
 					loading,
@@ -235,7 +239,7 @@ export function createAssetRegistry(
 					start: (started) => runLoad(bundleId, started.deferred),
 				});
 			}),
-		unloadBundle: (bundleId: string) =>
+		unloadBundle: (bundleId: BundleId) =>
 			Effect.gen(function* () {
 				const entry = SynchronizedRef.getUnsafe(loading).get(bundleId);
 				if (entry === undefined) return;
@@ -254,7 +258,7 @@ export function createAssetRegistry(
 					return [undefined, nextState];
 				});
 			}),
-		isLoaded: (bundleId: string) =>
+		isLoaded: (bundleId: BundleId) =>
 			SynchronizedRef.getUnsafe(loading).get(bundleId)?._tag === "loaded",
 		getTexture: (assetId: AssetId) =>
 			Effect.suspend(() => {

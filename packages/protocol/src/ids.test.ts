@@ -1,6 +1,6 @@
 import * as Schema from "effect/Schema";
 import { describe, expect, it } from "vitest";
-import { AssetId, EffectId, NodeId, ViewerId, WidgetId } from "./ids";
+import { AssetId, BundleId, EffectId, NodeId, ViewerId, WidgetId } from "./ids";
 
 const decode = (schema: Schema.Decoder<unknown>) => {
 	return (input: unknown) => Schema.decodeUnknownSync(schema)(input);
@@ -15,6 +15,7 @@ describe("identifiers", () => {
 		expect(decode(AssetId)("avatar_01")).toBe("avatar_01");
 		expect(decode(EffectId)("sparkle-2")).toBe("sparkle-2");
 		expect(decode(ViewerId)("123456")).toBe("123456");
+		expect(decode(BundleId)("shooting-words")).toBe("shooting-words");
 	});
 
 	it("returns the same string, without trimming", () => {
@@ -45,7 +46,14 @@ describe("identifiers", () => {
 	});
 
 	it("rejects the same values for every brand", () => {
-		for (const schema of [WidgetId, NodeId, AssetId, EffectId, ViewerId]) {
+		for (const schema of [
+			WidgetId,
+			NodeId,
+			AssetId,
+			EffectId,
+			ViewerId,
+			BundleId,
+		]) {
 			expect(() => decode(schema)("a b")).toThrow();
 			expect(() => decode(schema)("")).toThrow();
 		}

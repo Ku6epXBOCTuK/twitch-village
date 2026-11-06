@@ -1,4 +1,4 @@
-import { PROTOCOL_VERSION, type WidgetId } from "@tv/protocol";
+import { type BundleId, PROTOCOL_VERSION, type WidgetId } from "@tv/protocol";
 import { Deferred, Effect, Exit, Fiber, Layer } from "effect";
 import type { Application } from "pixi.js";
 import { Container } from "pixi.js";
@@ -36,6 +36,8 @@ import {
 
 const villageId = "village" as WidgetId;
 const arenaId = "arena" as WidgetId;
+const villageBundle = "village" as BundleId;
+const missingBundle = "missing" as BundleId;
 const knownIds: readonly WidgetId[] = [villageId, arenaId];
 
 interface PostedEnvelope {
@@ -49,7 +51,7 @@ const descriptorOf = (
 ): WidgetDescriptor => ({
 	id,
 	workerUrl: new URL(`http://localhost/${id}.js`),
-	assetBundle: "village",
+	assetBundle: villageBundle,
 	config: { speed: 1 },
 	...patch,
 });
@@ -63,7 +65,7 @@ const setup = async (autoReady = true) => {
 	for (const id of knownIds) {
 		const registry = createAssetRegistry({ widgetId: id, backend });
 		await Effect.runPromise(
-			registry.init({ bundles: [{ name: "village", assets: [] }] }),
+			registry.init({ bundles: [{ name: villageBundle, assets: [] }] }),
 		);
 		registries.set(id, registry);
 	}
@@ -382,7 +384,9 @@ describe("SceneManager", () => {
 
 		const exit = await run(
 			Effect.exit(
-				manager.activate(descriptorOf(villageId, { assetBundle: "missing" })),
+				manager.activate(
+					descriptorOf(villageId, { assetBundle: missingBundle }),
+				),
 			),
 		);
 

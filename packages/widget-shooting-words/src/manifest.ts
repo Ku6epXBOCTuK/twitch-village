@@ -1,4 +1,4 @@
-import type { WidgetId } from "@tv/protocol";
+import type { BundleId, WidgetId } from "@tv/protocol";
 import {
 	SHOOTING_WORDS_ASSET_BUNDLE,
 	SHOOTING_WORDS_WIDGET_ID,
@@ -6,7 +6,7 @@ import {
 
 export interface ShootingWordsWidgetDefinition {
 	readonly id: WidgetId;
-	readonly assetBundle: string;
+	readonly assetBundle: BundleId;
 }
 
 export const shootingWordsWidget: ShootingWordsWidgetDefinition = {

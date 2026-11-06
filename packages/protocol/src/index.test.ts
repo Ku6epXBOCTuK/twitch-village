@@ -12,6 +12,7 @@ const expectedValues = [
 	"EffectId",
 	"ViewerId",
 	"WidgetId",
+	"BundleId",
 	"CreateNode",
 	"RemoveNode",
 	"SetParent",

@@ -1,4 +1,5 @@
 import {
+	type BundleId,
 	type EffectId,
 	type NodeId,
 	PROTOCOL_VERSION,
@@ -38,6 +39,7 @@ import { createSceneManager, type SceneManager } from "../scene/scene-manager";
 
 const villageId = "village" as WidgetId;
 const arenaId = "arena" as WidgetId;
+const bundleId = "bundle" as BundleId;
 const widgetIds: readonly WidgetId[] = [villageId, arenaId];
 const CYCLES = 20;
 
@@ -49,7 +51,7 @@ interface PostedEnvelope {
 const descriptorOf = (id: WidgetId): WidgetDescriptor => ({
 	id,
 	workerUrl: new URL(`http://localhost/${id}.js`),
-	assetBundle: "bundle",
+	assetBundle: bundleId,
 	effectsManifest: new URL(`http://localhost/${id}-effects.json`),
 	config: {},
 });
@@ -70,7 +72,7 @@ const setup = async () => {
 	for (const id of widgetIds) {
 		const registry = createAssetRegistry({ widgetId: id, backend });
 		await Effect.runPromise(
-			registry.init({ bundles: [{ name: "bundle", assets: [] }] }),
+			registry.init({ bundles: [{ name: bundleId, assets: [] }] }),
 		);
 		registries.set(id, registry);
 	}
@@ -218,7 +220,7 @@ describe("widget lifecycle", () => {
 			await run(runFrame(manager));
 
 			for (const id of widgetIds) {
-				expect(registries.get(id)?.isLoaded("bundle")).toBe(true);
+				expect(registries.get(id)?.isLoaded(bundleId)).toBe(true);
 			}
 			expect(compiler.filters.length).toBe((cycle + 1) * widgetIds.length);
 
@@ -233,7 +235,7 @@ describe("widget lifecycle", () => {
 
 			for (const id of widgetIds) {
 				expect(manager.status(id)).toBeUndefined();
-				expect(registries.get(id)?.isLoaded("bundle")).toBe(false);
+				expect(registries.get(id)?.isLoaded(bundleId)).toBe(false);
 			}
 
 			expect(compiler.destroyed).toHaveLength(compiler.filters.length);

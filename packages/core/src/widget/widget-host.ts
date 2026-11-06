@@ -1,4 +1,5 @@
 import {
+	type BundleId,
 	type BundleLoadFailed,
 	type BundleLoadTimeout,
 	type CoreToWidget,
@@ -44,7 +45,7 @@ const READY_TIMEOUT = "5 seconds";
 export interface WidgetDescriptor {
 	readonly id: WidgetId;
 	readonly workerUrl: URL;
-	readonly assetBundle: string;
+	readonly assetBundle: BundleId;
 	readonly effectsManifest?: URL;
 	readonly config?: unknown;
 }

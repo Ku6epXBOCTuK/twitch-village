@@ -1,4 +1,4 @@
-import type { AssetId } from "@tv/protocol";
+import type { AssetId, BundleId } from "@tv/protocol";
 import { Assets as PixiAssets, type Texture } from "pixi.js";
 import type { AssetBackend } from "./asset-registry";
 import type { AssetManifest } from "./manifest";
@@ -18,14 +18,14 @@ export function createPixiAssetBackend(
 	const baseUrl = options.baseUrl ?? "/";
 	let manifest: AssetManifest | undefined;
 	const textures = new Map<AssetId, Texture>();
-	const bundleSources = new Map<string, string[]>();
-	const bundleAliases = new Map<string, AssetId[]>();
+	const bundleSources = new Map<BundleId, string[]>();
+	const bundleAliases = new Map<BundleId, AssetId[]>();
 
 	return {
 		async init(nextManifest: AssetManifest): Promise<void> {
 			manifest = nextManifest;
 		},
-		async loadBundle(bundleId: string): Promise<void> {
+		async loadBundle(bundleId: BundleId): Promise<void> {
 			if (manifest === undefined) {
 				throw new Error("Asset backend is not initialized");
 			}
@@ -56,7 +56,7 @@ export function createPixiAssetBackend(
 			bundleSources.set(bundleId, sources);
 			bundleAliases.set(bundleId, aliases);
 		},
-		async unloadBundle(bundleId: string): Promise<void> {
+		async unloadBundle(bundleId: BundleId): Promise<void> {
 			const aliases = bundleAliases.get(bundleId);
 			const sources = bundleSources.get(bundleId);
 			if (aliases === undefined || sources === undefined) return;

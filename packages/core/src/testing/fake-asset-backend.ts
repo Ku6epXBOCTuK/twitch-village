@@ -1,4 +1,4 @@
-import type { AssetId } from "@tv/protocol";
+import type { AssetId, BundleId } from "@tv/protocol";
 import type { Texture } from "pixi.js";
 import type { AssetBackend } from "../assets/asset-registry";
 import type { AssetManifest } from "../assets/manifest";
@@ -81,7 +81,7 @@ export function createFakeAssetBackend(): FakeAssetBackend {
 				throw initFailure;
 			}
 		},
-		async loadBundle(bundleId: string): Promise<void> {
+		async loadBundle(bundleId: BundleId): Promise<void> {
 			calls.push({ method: "loadBundle", args: [bundleId] });
 			const gate = loadGates.get(bundleId);
 			if (gate !== undefined) {
@@ -101,7 +101,7 @@ export function createFakeAssetBackend(): FakeAssetBackend {
 				throw failure;
 			}
 		},
-		async unloadBundle(bundleId: string): Promise<void> {
+		async unloadBundle(bundleId: BundleId): Promise<void> {
 			calls.push({ method: "unloadBundle", args: [bundleId] });
 			const failure = unloadFailures.get(bundleId);
 			if (failure !== undefined) {

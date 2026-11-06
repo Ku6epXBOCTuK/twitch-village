@@ -1,4 +1,5 @@
 import {
+	type BundleId,
 	ManifestLoadFailed,
 	PROTOCOL_VERSION,
 	type NodeId,
@@ -35,6 +36,7 @@ import {
 } from "./widget-host";
 
 const widgetId = "village" as WidgetId;
+const bundleId = "village" as BundleId;
 const rootId = "root" as NodeId;
 const readyEnvelope = {
 	protocolVersion: PROTOCOL_VERSION,
@@ -63,7 +65,7 @@ const setup = async (
 	const backend = createFakeAssetBackend();
 	const registry = createAssetRegistry({ widgetId, backend });
 	await Effect.runPromise(
-		registry.init({ bundles: [{ name: "village", assets: [] }] }),
+		registry.init({ bundles: [{ name: bundleId, assets: [] }] }),
 	);
 
 	const compiler = createFakeEffectCompiler();
@@ -84,7 +86,7 @@ const setup = async (
 	const descriptor: WidgetDescriptor = {
 		id: widgetId,
 		workerUrl: new URL("http://localhost/village.js"),
-		assetBundle: "village",
+		assetBundle: bundleId,
 		config: { speed: 1 },
 		...descriptorPatch,
 	};
@@ -242,9 +244,9 @@ describe("WidgetHost", () => {
 			return removeNode(nodeId);
 		};
 		const unloadBundle = backend.unloadBundle.bind(backend);
-		backend.unloadBundle = async (bundleId: string): Promise<void> => {
+		backend.unloadBundle = async (bundle: BundleId): Promise<void> => {
 			order.push("unload");
-			await unloadBundle(bundleId);
+			await unloadBundle(bundle);
 		};
 
 		await Effect.runPromise(host.stop());

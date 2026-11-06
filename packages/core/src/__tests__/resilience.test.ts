@@ -1,4 +1,9 @@
-import { type NodeId, PROTOCOL_VERSION, type WidgetId } from "@tv/protocol";
+import {
+	type BundleId,
+	type NodeId,
+	PROTOCOL_VERSION,
+	type WidgetId,
+} from "@tv/protocol";
 import { Effect, Layer } from "effect";
 import { TestClock } from "effect/testing";
 import { describe, expect, it } from "vitest";
@@ -32,6 +37,8 @@ import {
 	type WidgetHost,
 } from "../widget/widget-host";
 
+const bundleId = "bundle" as BundleId;
+
 interface PostedEnvelope {
 	readonly protocolVersion: number;
 	readonly message: { readonly _tag: string } & Record<string, unknown>;
@@ -40,7 +47,7 @@ interface PostedEnvelope {
 const descriptorOf = (id: WidgetId): WidgetDescriptor => ({
 	id,
 	workerUrl: new URL(`http://localhost/${id}.js`),
-	assetBundle: "bundle",
+	assetBundle: bundleId,
 	config: {},
 });
 
@@ -82,7 +89,7 @@ const setup = async (ids: readonly WidgetId[]) => {
 		const backend = createFakeAssetBackend();
 		const registry = createAssetRegistry({ widgetId: id, backend });
 		await Effect.runPromise(
-			registry.init({ bundles: [{ name: "bundle", assets: [] }] }),
+			registry.init({ bundles: [{ name: bundleId, assets: [] }] }),
 		);
 		backends.set(id, backend);
 		registries.set(id, registry);

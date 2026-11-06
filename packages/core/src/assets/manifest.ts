@@ -1,4 +1,4 @@
-import { AssetId } from "@tv/protocol";
+import { AssetId, BundleId } from "@tv/protocol";
 import { Schema } from "effect";
 
 const AssetAlias = Schema.Union([AssetId, Schema.Array(AssetId)]);
@@ -14,7 +14,7 @@ export const AssetEntrySchema = Schema.Struct({
 export type AssetEntry = Schema.Schema.Type<typeof AssetEntrySchema>;
 
 export const AssetBundleSchema = Schema.Struct({
-	name: Schema.String,
+	name: BundleId,
 	assets: Schema.Array(AssetEntrySchema),
 });
 

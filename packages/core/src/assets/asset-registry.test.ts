@@ -1,4 +1,4 @@
-import type { AssetId, WidgetId } from "@tv/protocol";
+import type { AssetId, BundleId, WidgetId } from "@tv/protocol";
 import { AssetNotFound, BundleLoadTimeout } from "@tv/protocol";
 import { Cause, Effect, Exit, Fiber } from "effect";
 import { TestClock } from "effect/testing";
@@ -17,6 +17,8 @@ import {
 import type { AssetManifest } from "./manifest";
 
 const village = "village" as WidgetId;
+const villageBundle = "village" as BundleId;
+const alertsBundle = "alerts" as BundleId;
 
 const asAssetId = (value: string): AssetId => value as AssetId;
 
@@ -25,7 +27,7 @@ const avatar = asAssetId("avatar/cat/0");
 const manifest: AssetManifest = {
 	bundles: [
 		{
-			name: "village",
+			name: villageBundle,
 			assets: [
 				{ alias: avatar, src: "avatar/cat-0.png" },
 				{
@@ -35,7 +37,7 @@ const manifest: AssetManifest = {
 			],
 		},
 		{
-			name: "alerts",
+			name: alertsBundle,
 			assets: [{ alias: asAssetId("bell"), src: "bell.png" }],
 		},
 	],
@@ -136,17 +138,17 @@ describe("AssetRegistry", () => {
 		const { registry, backend } = setup();
 		await Effect.runPromise(registry.init(manifest));
 
-		await Effect.runPromise(registry.loadBundle("village"));
+		await Effect.runPromise(registry.loadBundle(villageBundle));
 
-		expect(registry.isLoaded("village")).toBe(true);
+		expect(registry.isLoaded(villageBundle)).toBe(true);
 		expect(callsOf(backend, "loadBundle")).toEqual([["village"]]);
 	});
 
 	it("loads the same bundle only once", async () => {
 		const { registry, backend } = setup();
 
-		await Effect.runPromise(registry.loadBundle("village"));
-		await Effect.runPromise(registry.loadBundle("village"));
+		await Effect.runPromise(registry.loadBundle(villageBundle));
+		await Effect.runPromise(registry.loadBundle(villageBundle));
 
 		expect(callsOf(backend, "loadBundle")).toEqual([["village"]]);
 	});
@@ -155,47 +157,47 @@ describe("AssetRegistry", () => {
 		const { registry, backend } = setup();
 		const release = backend.holdLoad("village");
 
-		const first = Effect.runPromise(registry.loadBundle("village"));
-		const second = Effect.runPromise(registry.loadBundle("village"));
+		const first = Effect.runPromise(registry.loadBundle(villageBundle));
+		const second = Effect.runPromise(registry.loadBundle(villageBundle));
 		await Promise.resolve();
 
 		release();
 		await Promise.all([first, second]);
 
 		expect(callsOf(backend, "loadBundle")).toEqual([["village"]]);
-		expect(registry.isLoaded("village")).toBe(true);
+		expect(registry.isLoaded(villageBundle)).toBe(true);
 	});
 
 	it("reports a backend load failure as BundleLoadFailed", async () => {
 		const { registry, backend } = setup();
 		backend.failures.set("village", new Error("network is down"));
 
-		expect(await failureOf(registry.loadBundle("village"))).toMatchObject({
+		expect(await failureOf(registry.loadBundle(villageBundle))).toMatchObject({
 			_tag: "BundleLoadFailed",
 			bundleId: "village",
 			message: expect.stringContaining("network is down"),
 		});
-		expect(registry.isLoaded("village")).toBe(false);
+		expect(registry.isLoaded(villageBundle)).toBe(false);
 	});
 
 	it("retries a load after a failure", async () => {
 		const { registry, backend } = setup();
 		backend.failures.set("village", new Error("network is down"));
-		await failureOf(registry.loadBundle("village"));
+		await failureOf(registry.loadBundle(villageBundle));
 
 		backend.failures.delete("village");
-		await Effect.runPromise(registry.loadBundle("village"));
+		await Effect.runPromise(registry.loadBundle(villageBundle));
 
-		expect(registry.isLoaded("village")).toBe(true);
+		expect(registry.isLoaded(villageBundle)).toBe(true);
 	});
 
 	it("retries a failed load within the same call", async () => {
 		const { registry, backend } = setup({ maxAttempts: 3, retryDelay: 0 });
 		backend.failLoad("village", new Error("network is down"), 2);
 
-		await Effect.runPromise(registry.loadBundle("village"));
+		await Effect.runPromise(registry.loadBundle(villageBundle));
 
-		expect(registry.isLoaded("village")).toBe(true);
+		expect(registry.isLoaded(villageBundle)).toBe(true);
 		expect(callsOf(backend, "loadBundle")).toHaveLength(3);
 	});
 
@@ -203,12 +205,12 @@ describe("AssetRegistry", () => {
 		const { registry, backend } = setup({ maxAttempts: 2, retryDelay: 0 });
 		backend.failures.set("village", new Error("network is down"));
 
-		expect(await failureOf(registry.loadBundle("village"))).toMatchObject({
+		expect(await failureOf(registry.loadBundle(villageBundle))).toMatchObject({
 			_tag: "BundleLoadFailed",
 			bundleId: "village",
 		});
 		expect(callsOf(backend, "loadBundle")).toHaveLength(2);
-		expect(registry.isLoaded("village")).toBe(false);
+		expect(registry.isLoaded(villageBundle)).toBe(false);
 	});
 
 	it("waits the retry delay between attempts", async () => {
@@ -220,13 +222,15 @@ describe("AssetRegistry", () => {
 
 		await Effect.runPromise(
 			Effect.gen(function* () {
-				const fiber = yield* Effect.forkChild(registry.loadBundle("village"));
+				const fiber = yield* Effect.forkChild(
+					registry.loadBundle(villageBundle),
+				);
 				yield* TestClock.adjust("1 second");
 				return yield* Fiber.join(fiber);
 			}).pipe(Effect.provide(TestClock.layer())),
 		);
 
-		expect(registry.isLoaded("village")).toBe(true);
+		expect(registry.isLoaded(villageBundle)).toBe(true);
 		expect(callsOf(backend, "loadBundle")).toHaveLength(2);
 	});
 
@@ -237,7 +241,7 @@ describe("AssetRegistry", () => {
 		const failure = await Effect.runPromise(
 			Effect.gen(function* () {
 				const fiber = yield* Effect.forkChild(
-					Effect.flip(registry.loadBundle("village")),
+					Effect.flip(registry.loadBundle(villageBundle)),
 				);
 				yield* TestClock.adjust("5 seconds");
 				return yield* Fiber.join(fiber);
@@ -253,23 +257,23 @@ describe("AssetRegistry", () => {
 			bundleId: "village",
 			timeoutMs: 5000,
 		});
-		expect(registry.isLoaded("village")).toBe(false);
+		expect(registry.isLoaded(villageBundle)).toBe(false);
 	});
 
 	it("unloads a bundle", async () => {
 		const { registry, backend } = setup();
-		await Effect.runPromise(registry.loadBundle("village"));
+		await Effect.runPromise(registry.loadBundle(villageBundle));
 
-		await Effect.runPromise(registry.unloadBundle("village"));
+		await Effect.runPromise(registry.unloadBundle(villageBundle));
 
-		expect(registry.isLoaded("village")).toBe(false);
+		expect(registry.isLoaded(villageBundle)).toBe(false);
 		expect(callsOf(backend, "unloadBundle")).toEqual([["village"]]);
 	});
 
 	it("does not call the backend for a bundle that was never loaded", async () => {
 		const { registry, backend } = setup();
 
-		await Effect.runPromise(registry.unloadBundle("village"));
+		await Effect.runPromise(registry.unloadBundle(villageBundle));
 
 		expect(callsOf(backend, "unloadBundle")).toEqual([]);
 	});
@@ -278,9 +282,9 @@ describe("AssetRegistry", () => {
 		const { registry, backend } = setup();
 		const release = backend.holdLoad("village");
 
-		const load = Effect.runPromise(registry.loadBundle("village"));
+		const load = Effect.runPromise(registry.loadBundle(villageBundle));
 		await Promise.resolve();
-		const unload = Effect.runPromise(registry.unloadBundle("village"));
+		const unload = Effect.runPromise(registry.unloadBundle(villageBundle));
 		await Promise.resolve();
 
 		expect(callsOf(backend, "unloadBundle")).toEqual([]);
@@ -289,7 +293,7 @@ describe("AssetRegistry", () => {
 		await load;
 		await unload;
 
-		expect(registry.isLoaded("village")).toBe(false);
+		expect(registry.isLoaded(villageBundle)).toBe(false);
 		expect(backend.calls.map((call) => call.method)).toEqual([
 			"loadBundle",
 			"unloadBundle",
@@ -298,15 +302,17 @@ describe("AssetRegistry", () => {
 
 	it("reports a backend unload failure and keeps the bundle loaded", async () => {
 		const { registry, backend } = setup();
-		await Effect.runPromise(registry.loadBundle("village"));
+		await Effect.runPromise(registry.loadBundle(villageBundle));
 		backend.unloadFailures.set("village", new Error("disk is gone"));
 
-		expect(await failureOf(registry.unloadBundle("village"))).toMatchObject({
-			_tag: "BundleUnloadFailed",
-			bundleId: "village",
-			message: expect.stringContaining("disk is gone"),
-		});
-		expect(registry.isLoaded("village")).toBe(true);
+		expect(await failureOf(registry.unloadBundle(villageBundle))).toMatchObject(
+			{
+				_tag: "BundleUnloadFailed",
+				bundleId: "village",
+				message: expect.stringContaining("disk is gone"),
+			},
+		);
+		expect(registry.isLoaded(villageBundle)).toBe(true);
 	});
 
 	it("returns the texture of a loaded bundle", async () => {
@@ -314,7 +320,7 @@ describe("AssetRegistry", () => {
 		const texture = stubTexture();
 		backend.textures.set(avatar, texture);
 		await Effect.runPromise(registry.init(manifest));
-		await Effect.runPromise(registry.loadBundle("village"));
+		await Effect.runPromise(registry.loadBundle(villageBundle));
 
 		expect(await Effect.runPromise(registry.getTexture(avatar))).toBe(texture);
 	});
@@ -324,7 +330,7 @@ describe("AssetRegistry", () => {
 		const second = asAssetId("avatar/cat/2");
 		backend.textures.set(second, stubTexture());
 		await Effect.runPromise(registry.init(manifest));
-		await Effect.runPromise(registry.loadBundle("village"));
+		await Effect.runPromise(registry.loadBundle(villageBundle));
 
 		expect(await Effect.runPromise(registry.getTexture(second))).toBeDefined();
 	});
@@ -343,8 +349,8 @@ describe("AssetRegistry", () => {
 		const { registry, backend } = setup();
 		backend.textures.set(avatar, stubTexture());
 		await Effect.runPromise(registry.init(manifest));
-		await Effect.runPromise(registry.loadBundle("village"));
-		await Effect.runPromise(registry.unloadBundle("village"));
+		await Effect.runPromise(registry.loadBundle(villageBundle));
+		await Effect.runPromise(registry.unloadBundle(villageBundle));
 
 		expect(await failureOf(registry.getTexture(avatar))).toBeInstanceOf(
 			AssetNotFound,
@@ -376,7 +382,7 @@ describe("AssetRegistry", () => {
 	it("rejects an asset that the backend does not know", async () => {
 		const { registry } = setup();
 		await Effect.runPromise(registry.init(manifest));
-		await Effect.runPromise(registry.loadBundle("village"));
+		await Effect.runPromise(registry.loadBundle(villageBundle));
 
 		expect(await failureOf(registry.getTexture(avatar))).toBeInstanceOf(
 			AssetNotFound,

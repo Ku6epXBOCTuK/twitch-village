@@ -16,9 +16,10 @@ import {
 	WidgetCrashed,
 	WidgetTimeout,
 } from "./errors";
-import type { AssetId, EffectId, NodeId, WidgetId } from "./ids";
+import type { AssetId, BundleId, EffectId, NodeId, WidgetId } from "./ids";
 
 const widgetId = "village" as WidgetId;
+const bundleId = "village" as BundleId;
 const nodeId = "avatar:42" as NodeId;
 const assetId = "avatar_01" as AssetId;
 const effectId = "glow_pulse" as EffectId;
@@ -54,18 +55,18 @@ describe("protocol errors", () => {
 			new BundleLoadFailed({
 				widgetId,
 				message: "bundle failed to load",
-				bundleId: "village",
+				bundleId,
 			}),
 			new BundleLoadTimeout({
 				widgetId,
 				message: "bundle load timed out",
-				bundleId: "village",
+				bundleId,
 				timeoutMs: 5000,
 			}),
 			new BundleUnloadFailed({
 				widgetId,
 				message: "bundle failed to unload",
-				bundleId: "village",
+				bundleId,
 			}),
 		];
 
@@ -186,7 +187,7 @@ describe("protocol errors", () => {
 		const error = new BundleLoadFailed({
 			widgetId,
 			message: "bundle failed to load",
-			bundleId: "village",
+			bundleId,
 		});
 
 		expect(error.bundleId).toBe("village");
@@ -196,7 +197,7 @@ describe("protocol errors", () => {
 		const error = new BundleLoadTimeout({
 			widgetId,
 			message: "bundle load timed out",
-			bundleId: "village",
+			bundleId,
 			timeoutMs: 5000,
 		});
 
@@ -208,7 +209,7 @@ describe("protocol errors", () => {
 		const error = new BundleUnloadFailed({
 			widgetId,
 			message: "bundle failed to unload",
-			bundleId: "village",
+			bundleId,
 		});
 
 		expect(error.bundleId).toBe("village");

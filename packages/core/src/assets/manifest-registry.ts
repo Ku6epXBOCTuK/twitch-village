@@ -1,3 +1,4 @@
+import type { BundleId } from "@tv/protocol";
 import { Effect } from "effect";
 import {
 	type AssetRegistry,
@@ -14,11 +15,11 @@ export function createManifestAssetRegistry(
 
 	return {
 		...registry,
-		loadBundle: (bundleId: string) =>
+		loadBundle: (bundleId: BundleId) =>
 			registry
 				.init(manifest)
 				.pipe(Effect.flatMap(() => registry.loadBundle(bundleId))),
-		unloadBundle: (bundleId: string) =>
+		unloadBundle: (bundleId: BundleId) =>
 			registry
 				.init(manifest)
 				.pipe(Effect.flatMap(() => registry.unloadBundle(bundleId))),

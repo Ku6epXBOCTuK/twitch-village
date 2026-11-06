@@ -1,4 +1,4 @@
-import { PROTOCOL_VERSION, type WidgetId } from "@tv/protocol";
+import { type BundleId, PROTOCOL_VERSION, type WidgetId } from "@tv/protocol";
 import { Effect, Layer } from "effect";
 import type { Application } from "pixi.js";
 import { Container } from "pixi.js";
@@ -33,6 +33,7 @@ import { createSceneManager, type SceneManager } from "./scene-manager";
 
 const villageId = "village" as WidgetId;
 const arenaId = "arena" as WidgetId;
+const villageBundle = "village" as BundleId;
 
 interface PostedEnvelope {
 	readonly protocolVersion: number;
@@ -42,7 +43,7 @@ interface PostedEnvelope {
 const descriptorOf = (id: WidgetId): WidgetDescriptor => ({
 	id,
 	workerUrl: new URL(`http://localhost/${id}.js`),
-	assetBundle: "village",
+	assetBundle: villageBundle,
 	config: { speed: 1 },
 });
 
@@ -63,7 +64,7 @@ const setup = async () => {
 	for (const id of [villageId, arenaId]) {
 		const registry = createAssetRegistry({ widgetId: id, backend });
 		await Effect.runPromise(
-			registry.init({ bundles: [{ name: "village", assets: [] }] }),
+			registry.init({ bundles: [{ name: villageBundle, assets: [] }] }),
 		);
 		registries.set(id, registry);
 	}

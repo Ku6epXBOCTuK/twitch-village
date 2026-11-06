@@ -1,5 +1,5 @@
 import { Data } from "effect";
-import type { AssetId, EffectId, NodeId, WidgetId } from "./ids";
+import type { AssetId, BundleId, EffectId, NodeId, WidgetId } from "./ids";
 
 export class InvalidCommand extends Data.TaggedError("InvalidCommand")<{
 	widgetId: WidgetId;
@@ -71,20 +71,20 @@ export class ProtocolMismatch extends Data.TaggedError("ProtocolMismatch")<{
 export class BundleLoadFailed extends Data.TaggedError("BundleLoadFailed")<{
 	widgetId: WidgetId;
 	message: string;
-	bundleId: string;
+	bundleId: BundleId;
 }> {}
 
 export class BundleLoadTimeout extends Data.TaggedError("BundleLoadTimeout")<{
 	widgetId: WidgetId;
 	message: string;
-	bundleId: string;
+	bundleId: BundleId;
 	timeoutMs: number;
 }> {}
 
 export class BundleUnloadFailed extends Data.TaggedError("BundleUnloadFailed")<{
 	widgetId: WidgetId;
 	message: string;
-	bundleId: string;
+	bundleId: BundleId;
 }> {}
 
 export class ManifestLoadFailed extends Data.TaggedError("ManifestLoadFailed")<{
