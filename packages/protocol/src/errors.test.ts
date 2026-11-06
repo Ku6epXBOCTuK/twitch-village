@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
 	AssetNotFound,
 	BundleLoadFailed,
+	BundleLoadTimeout,
 	BundleUnloadFailed,
 	EffectCompileFailed,
 	EffectNotFound,
@@ -55,6 +56,12 @@ describe("protocol errors", () => {
 				message: "bundle failed to load",
 				bundleId: "village",
 			}),
+			new BundleLoadTimeout({
+				widgetId,
+				message: "bundle load timed out",
+				bundleId: "village",
+				timeoutMs: 5000,
+			}),
 			new BundleUnloadFailed({
 				widgetId,
 				message: "bundle failed to unload",
@@ -75,6 +82,7 @@ describe("protocol errors", () => {
 			"WidgetCrashed",
 			"ProtocolMismatch",
 			"BundleLoadFailed",
+			"BundleLoadTimeout",
 			"BundleUnloadFailed",
 		]);
 	});
@@ -182,6 +190,18 @@ describe("protocol errors", () => {
 		});
 
 		expect(error.bundleId).toBe("village");
+	});
+
+	it("BundleLoadTimeout keeps bundleId and timeoutMs", () => {
+		const error = new BundleLoadTimeout({
+			widgetId,
+			message: "bundle load timed out",
+			bundleId: "village",
+			timeoutMs: 5000,
+		});
+
+		expect(error.bundleId).toBe("village");
+		expect(error.timeoutMs).toBe(5000);
 	});
 
 	it("BundleUnloadFailed keeps bundleId", () => {

@@ -1,5 +1,6 @@
 import {
 	type BundleLoadFailed,
+	type BundleLoadTimeout,
 	type CoreToWidget,
 	type ManifestLoadFailed,
 	PROTOCOL_VERSION,
@@ -51,6 +52,7 @@ export interface WidgetDescriptor {
 
 export type WidgetError =
 	| BundleLoadFailed
+	| BundleLoadTimeout
 	| ManifestLoadFailed
 	| ProtocolMismatch
 	| WidgetCrashed

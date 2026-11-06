@@ -16,6 +16,7 @@ export interface FakeAssetBackend extends AssetBackend {
 	initFailure: unknown;
 	holdInit(): () => void;
 	holdLoad(bundleId: string): () => void;
+	failLoad(bundleId: string, error: unknown, times?: number): void;
 }
 
 export function createFakeAssetBackend(): FakeAssetBackend {
@@ -23,6 +24,10 @@ export function createFakeAssetBackend(): FakeAssetBackend {
 	const textures = new Map<AssetId, Texture>();
 	const failures = new Map<string, unknown>();
 	const unloadFailures = new Map<string, unknown>();
+	const transientFailures = new Map<
+		string,
+		{ readonly error: unknown; remaining: number }
+	>();
 	const loadGates = new Map<string, Promise<void>>();
 	let pendingInit: Promise<void> | undefined;
 	let initFailure: unknown;
@@ -59,6 +64,13 @@ export function createFakeAssetBackend(): FakeAssetBackend {
 				box.release?.();
 			};
 		},
+		failLoad(bundleId: string, error: unknown, times = 1): void {
+			const existing = transientFailures.get(bundleId);
+			transientFailures.set(bundleId, {
+				error,
+				remaining: (existing?.remaining ?? 0) + times,
+			});
+		},
 		async init(manifest: AssetManifest): Promise<void> {
 			calls.push({ method: "init", args: [manifest] });
 			const gate = pendingInit;
@@ -74,6 +86,15 @@ export function createFakeAssetBackend(): FakeAssetBackend {
 			const gate = loadGates.get(bundleId);
 			if (gate !== undefined) {
 				await gate;
+			}
+			const transient = transientFailures.get(bundleId);
+			if (transient !== undefined) {
+				if (transient.remaining <= 1) {
+					transientFailures.delete(bundleId);
+				} else {
+					transient.remaining -= 1;
+				}
+				throw transient.error;
 			}
 			const failure = failures.get(bundleId);
 			if (failure !== undefined) {

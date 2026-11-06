@@ -1,6 +1,7 @@
 import type { AssetId, WidgetId } from "@tv/protocol";
-import { AssetNotFound } from "@tv/protocol";
-import { Cause, Effect, Exit } from "effect";
+import { AssetNotFound, BundleLoadTimeout } from "@tv/protocol";
+import { Cause, Effect, Exit, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import { describe, expect, it } from "vitest";
 import {
 	callsOf,
@@ -40,13 +41,19 @@ const manifest: AssetManifest = {
 	],
 };
 
-const setup = (): {
+const setup = (
+	overrides: Partial<AssetRegistryOptions> = {},
+): {
 	registry: AssetRegistry;
 	backend: FakeAssetBackend;
 	options: AssetRegistryOptions;
 } => {
 	const backend = createFakeAssetBackend();
-	const options: AssetRegistryOptions = { widgetId: village, backend };
+	const options: AssetRegistryOptions = {
+		widgetId: village,
+		backend,
+		...overrides,
+	};
 	return { registry: createAssetRegistry(options), backend, options };
 };
 
@@ -180,6 +187,73 @@ describe("AssetRegistry", () => {
 		await Effect.runPromise(registry.loadBundle("village"));
 
 		expect(registry.isLoaded("village")).toBe(true);
+	});
+
+	it("retries a failed load within the same call", async () => {
+		const { registry, backend } = setup({ maxAttempts: 3, retryDelay: 0 });
+		backend.failLoad("village", new Error("network is down"), 2);
+
+		await Effect.runPromise(registry.loadBundle("village"));
+
+		expect(registry.isLoaded("village")).toBe(true);
+		expect(callsOf(backend, "loadBundle")).toHaveLength(3);
+	});
+
+	it("gives up after the last allowed attempt", async () => {
+		const { registry, backend } = setup({ maxAttempts: 2, retryDelay: 0 });
+		backend.failures.set("village", new Error("network is down"));
+
+		expect(await failureOf(registry.loadBundle("village"))).toMatchObject({
+			_tag: "BundleLoadFailed",
+			bundleId: "village",
+		});
+		expect(callsOf(backend, "loadBundle")).toHaveLength(2);
+		expect(registry.isLoaded("village")).toBe(false);
+	});
+
+	it("waits the retry delay between attempts", async () => {
+		const { registry, backend } = setup({
+			maxAttempts: 2,
+			retryDelay: "1 second",
+		});
+		backend.failLoad("village", new Error("network is down"));
+
+		await Effect.runPromise(
+			Effect.gen(function* () {
+				const fiber = yield* Effect.forkChild(registry.loadBundle("village"));
+				yield* TestClock.adjust("1 second");
+				return yield* Fiber.join(fiber);
+			}).pipe(Effect.provide(TestClock.layer())),
+		);
+
+		expect(registry.isLoaded("village")).toBe(true);
+		expect(callsOf(backend, "loadBundle")).toHaveLength(2);
+	});
+
+	it("fails with BundleLoadTimeout when an attempt runs out of time", async () => {
+		const { registry, backend } = setup({ timeoutMs: 5000 });
+		const release = backend.holdLoad("village");
+
+		const failure = await Effect.runPromise(
+			Effect.gen(function* () {
+				const fiber = yield* Effect.forkChild(
+					Effect.flip(registry.loadBundle("village")),
+				);
+				yield* TestClock.adjust("5 seconds");
+				return yield* Fiber.join(fiber);
+			}).pipe(Effect.provide(TestClock.layer())),
+		);
+
+		release();
+
+		expect(failure).toBeInstanceOf(BundleLoadTimeout);
+		expect(failure).toMatchObject({
+			_tag: "BundleLoadTimeout",
+			widgetId: village,
+			bundleId: "village",
+			timeoutMs: 5000,
+		});
+		expect(registry.isLoaded("village")).toBe(false);
 	});
 
 	it("unloads a bundle", async () => {

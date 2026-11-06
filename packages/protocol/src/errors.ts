@@ -74,6 +74,13 @@ export class BundleLoadFailed extends Data.TaggedError("BundleLoadFailed")<{
 	bundleId: string;
 }> {}
 
+export class BundleLoadTimeout extends Data.TaggedError("BundleLoadTimeout")<{
+	widgetId: WidgetId;
+	message: string;
+	bundleId: string;
+	timeoutMs: number;
+}> {}
+
 export class BundleUnloadFailed extends Data.TaggedError("BundleUnloadFailed")<{
 	widgetId: WidgetId;
 	message: string;
