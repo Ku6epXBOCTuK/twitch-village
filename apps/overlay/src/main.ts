@@ -17,6 +17,7 @@ import {
 import { Effect } from "effect";
 import pizdudesWorkerUrl from "../../../packages/widget-pizdudes/src/worker.ts?worker&url";
 import { readOverlayConfig } from "./config";
+import { createDebugPanel, type DebugPanel } from "./debug/panel";
 
 const root = document.querySelector<HTMLDivElement>("#app");
 
@@ -52,24 +53,43 @@ async function main(): Promise<void> {
 
 	const source = new MockEventSource();
 	source.subscribe((event) => scene.dispatch(event));
-	const sourceConfig = { seed: config.seed, mode: config.mode };
+	let sourceConfig = { seed: config.seed, mode: config.mode };
+	const descriptor = {
+		id: PIZDUDES_WIDGET_ID,
+		workerUrl: new URL(pizdudesWorkerUrl, import.meta.url),
+		assetBundle: PIZDUDES_ASSET_BUNDLE,
+		config: { debug: config.debug },
+	};
 
 	for (const widgetId of config.widgets) {
 		if (widgetId !== PIZDUDES_WIDGET_ID) {
 			console.warn(`unknown widget ${widgetId}`);
 			continue;
 		}
-		await runtime.runPromise(
-			scene.activate({
-				id: PIZDUDES_WIDGET_ID,
-				workerUrl: new URL(pizdudesWorkerUrl, import.meta.url),
-				assetBundle: PIZDUDES_ASSET_BUNDLE,
-				config: { debug: config.debug },
-			}),
-		);
+		await runtime.runPromise(scene.activate(descriptor));
 	}
 
 	source.start(sourceConfig);
+
+	let panel: DebugPanel | undefined;
+	if (config.debug) {
+		panel = createDebugPanel({
+			statuses,
+			widgets: config.widgets,
+			source,
+			seed: config.seed,
+			onSeedChange: (seed) => {
+				sourceConfig = { ...sourceConfig, seed };
+				source.stop();
+				source.start(sourceConfig);
+			},
+			onClear: () => {
+				void runtime
+					.runPromise(scene.activate(descriptor, { restart: true }))
+					.catch((cause: unknown) => console.error("restart failed", cause));
+			},
+		});
+	}
 
 	document.addEventListener("visibilitychange", () => {
 		if (document.hidden) {
@@ -82,6 +102,7 @@ async function main(): Promise<void> {
 	});
 
 	window.addEventListener("beforeunload", () => {
+		panel?.dispose();
 		ticker.stop();
 		source.stop();
 		adapter.dispose();
