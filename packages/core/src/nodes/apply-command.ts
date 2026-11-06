@@ -71,6 +71,88 @@ const asResult = <A>(
 		onSuccess: () => noErrors,
 	});
 
+const checkLeaf = (
+	ctx: ApplyCommandContext,
+	command: LeafCommand,
+): RenderError | null => {
+	if (command._tag !== "CreateNode" && !ctx.target.has(command.nodeId)) {
+		return new UnknownNode({
+			widgetId: ctx.widgetId,
+			message: `Unknown node ${command.nodeId}`,
+			nodeId: command.nodeId,
+		});
+	}
+	if (
+		command._tag === "SetParent" &&
+		command.parentId !== null &&
+		!ctx.target.has(command.parentId)
+	) {
+		return new UnknownNode({
+			widgetId: ctx.widgetId,
+			message: `Unknown parent node ${command.parentId}`,
+			nodeId: command.parentId,
+		});
+	}
+	return null;
+};
+
+const isSimpleLeaf = (command: LeafCommand): boolean => {
+	switch (command._tag) {
+		case "CreateNode":
+		case "SetParent":
+		case "SetTransform":
+		case "SetText":
+		case "SetRectStyle":
+		case "SetTint":
+		case "RemoveFilter":
+			return true;
+		default:
+			return false;
+	}
+};
+
+const applySimpleLeaf = (
+	ctx: ApplyCommandContext,
+	command: LeafCommand,
+): RenderError | null => {
+	const invalid = checkLeaf(ctx, command);
+	if (invalid !== null) return invalid;
+
+	try {
+		switch (command._tag) {
+			case "CreateNode":
+				ctx.target.createNode(command.nodeId, command.kind);
+				return null;
+			case "SetParent":
+				ctx.target.setParent(command.nodeId, command.parentId, command.order);
+				return null;
+			case "SetTransform": {
+				const { nodeId, _tag, ...transform } = command;
+				ctx.target.setTransform(nodeId, transform);
+				return null;
+			}
+			case "SetText":
+				ctx.target.setText(command.nodeId, command.text, command.style);
+				return null;
+			case "SetRectStyle": {
+				const { nodeId, _tag, alpha, ...style } = command;
+				ctx.target.setRectStyle(nodeId, { ...style, alpha: alpha ?? 1 });
+				return null;
+			}
+			case "SetTint":
+				ctx.target.setTint(command.nodeId, command.tint);
+				return null;
+			case "RemoveFilter":
+				ctx.target.removeFilter(command.nodeId, command.effectId);
+				return null;
+			default:
+				return null;
+		}
+	} catch (error) {
+		return isContractError(error) ? error : toRenderFailed(ctx, command, error);
+	}
+};
+
 const applyLeaf = Effect.fnUntraced(function* (
 	ctx: ApplyCommandContext,
 	command: LeafCommand,
@@ -83,30 +165,9 @@ const applyLeaf = Effect.fnUntraced(function* (
 		});
 	}
 
-	if (command._tag !== "CreateNode") {
-		if (!ctx.target.has(command.nodeId)) {
-			return yield* Effect.fail(
-				new UnknownNode({
-					widgetId: ctx.widgetId,
-					message: `Unknown node ${command.nodeId}`,
-					nodeId: command.nodeId,
-				}),
-			);
-		}
-	}
-
-	if (
-		command._tag === "SetParent" &&
-		command.parentId !== null &&
-		!ctx.target.has(command.parentId)
-	) {
-		return yield* Effect.fail(
-			new UnknownNode({
-				widgetId: ctx.widgetId,
-				message: `Unknown parent node ${command.parentId}`,
-				nodeId: command.parentId,
-			}),
-		);
+	const invalid = checkLeaf(ctx, command);
+	if (invalid !== null) {
+		return yield* Effect.fail(invalid);
 	}
 
 	yield* Match.valueTags(command, {
@@ -170,12 +231,19 @@ const applyBatch = Effect.fnUntraced(function* (
 	const resultErrors: RenderError[] = [];
 
 	for (const [index, leaf] of commands.entries()) {
-		yield* Effect.match(applyLeaf(ctx, leaf), {
-			onFailure: (error) => {
+		if (isSimpleLeaf(leaf)) {
+			const error = applySimpleLeaf(ctx, leaf);
+			if (error !== null) {
 				resultErrors.push(error);
-			},
-			onSuccess: () => {},
-		});
+			}
+		} else {
+			yield* Effect.match(applyLeaf(ctx, leaf), {
+				onFailure: (error) => {
+					resultErrors.push(error);
+				},
+				onSuccess: () => {},
+			});
+		}
 
 		if (resultErrors.length >= DEFAULT_MAX_BATCH_ERRORS) {
 			return {

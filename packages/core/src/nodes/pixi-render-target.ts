@@ -26,6 +26,7 @@ export function createPixiRenderTarget(
 	const views = new Map<NodeId, Container>();
 	const contents = new Map<NodeId, Container>();
 	const filters = new Map<NodeId, Map<EffectId, Filter>>();
+	const filterLists = new Map<NodeId, Filter[]>();
 
 	const requireView = (nodeId: NodeId): Container => {
 		const view = views.get(nodeId);
@@ -52,8 +53,19 @@ export function createPixiRenderTarget(
 	};
 
 	const applyFilters = (nodeId: NodeId): void => {
-		const list = [...(filters.get(nodeId)?.values() ?? [])];
-		requireView(nodeId).filters = list.length > 0 ? list : [];
+		const active = filters.get(nodeId);
+		let list = filterLists.get(nodeId);
+		if (list === undefined) {
+			list = [];
+			filterLists.set(nodeId, list);
+		}
+		list.length = 0;
+		if (active !== undefined) {
+			for (const filter of active.values()) {
+				list.push(filter);
+			}
+		}
+		requireView(nodeId).filters = list;
 	};
 
 	return {
@@ -74,12 +86,13 @@ export function createPixiRenderTarget(
 			const view = views.get(nodeId);
 			view?.removeFromParent();
 			view?.destroy({ children: true });
-			for (const snapshot of removed) {
-				views.delete(snapshot.nodeId);
-				contents.delete(snapshot.nodeId);
-				filters.delete(snapshot.nodeId);
+			for (const removedId of removed) {
+				views.delete(removedId);
+				contents.delete(removedId);
+				filters.delete(removedId);
+				filterLists.delete(removedId);
 			}
-			return removed.map((snapshot) => snapshot.nodeId);
+			return removed;
 		},
 		setParent(nodeId, parentId, order) {
 			if (nodeId === parentId) {

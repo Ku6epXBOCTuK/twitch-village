@@ -115,6 +115,35 @@ export function describeRenderTargetContract(
 			expect(child?.parentId).toBeUndefined();
 		});
 
+		it("removes a re-parented node with its new parent", () => {
+			const target = create(widgetId);
+			target.createNode(asNodeId("root"), "container");
+			target.createNode(asNodeId("other"), "container");
+			target.createNode(asNodeId("child"), "sprite");
+			target.setParent(asNodeId("child"), asNodeId("root"), 0);
+			target.setParent(asNodeId("child"), asNodeId("other"), 0);
+
+			const removed = target.removeNode(asNodeId("other"));
+
+			expect([...removed].sort()).toEqual(["child", "other"]);
+			expect(target.has(asNodeId("root"))).toBe(true);
+			expect(target.has(asNodeId("child"))).toBe(false);
+		});
+
+		it("keeps a re-parented node when its old parent is removed", () => {
+			const target = create(widgetId);
+			target.createNode(asNodeId("root"), "container");
+			target.createNode(asNodeId("other"), "container");
+			target.createNode(asNodeId("child"), "sprite");
+			target.setParent(asNodeId("child"), asNodeId("root"), 0);
+			target.setParent(asNodeId("child"), asNodeId("other"), 0);
+
+			target.removeNode(asNodeId("root"));
+
+			expect(target.has(asNodeId("child"))).toBe(true);
+			expect(target.has(asNodeId("other"))).toBe(true);
+		});
+
 		it("rejects self-parenting with InvalidCommand", () => {
 			const target = create(widgetId);
 			target.createNode(asNodeId("avatar:1"), "sprite");

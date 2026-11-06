@@ -472,18 +472,19 @@ interface SceneManager {
 `Effect.fnUntraced`; `source.frames()` даёт снимок живых виджетов один раз за
 кадр. По каждому виджету: `has(widgetId)` в `StatusStore` (дешёвая проверка, не
 собирающая копию статуса) → `drain` → `applyCommand` по каждой записи → ошибки в
-`recordError`, `skipped` дельтой в `count` → `commit(widgetId, commands.length)`
-→ `ensureAlive()`.
+`recordError`, `skipped` дельтой в `count` →
+`commit(widgetId, commands.length)`.
 
-- Порядок именно такой: `commit` до `ensureAlive`, потому что сработавший
-  watchdog зовёт `markFailed`, а тот очищает шину — учёт применённого не должен
-  от него зависеть.
+- Watchdog живёт отдельным fiber в `Scope` активации (§5.6): кадр его не
+  проверяет и не вызывает.
 - `applied` считается записями очереди, как и `queued`: пропуски внутри `Batch`
   живут в `skipped`, а не в `processed`.
 - Ошибки — значения: кадр обрабатывает `ApplyCommandResult` и не ловит
   исключения, поэтому сбой одного виджета не отменяет остальные.
-- Горячий путь идёт циклом, а не `Effect.forEach`: кадр не должен аллоцировать
-  на элемент.
+- Простые leaf-команды (`CreateNode`, `SetParent`, `SetTransform`, `SetText`,
+  `SetRectStyle`, `SetTint`, `RemoveFilter`) идут синхронной веткой с одним
+  `try/catch`; остальные — Effect-путём. Горячий путь идёт циклом, а не
+  `Effect.forEach`, и не создаёт по `Effect` на команду.
 - `createEffectAdapter({runtime, program, onError})` — единственное место с
   `runSync`; исключение или отказ кадра уходит в `onError` и не всплывает в
   `app.ticker`. `createTicker` только подписывает и отписывает обработчик от

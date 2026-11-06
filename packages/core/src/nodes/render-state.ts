@@ -36,7 +36,7 @@ export interface RenderState {
 	readonly widgetId: WidgetId;
 	createNode(nodeId: NodeId, kind: NodeKind): void;
 	has(nodeId: NodeId): boolean;
-	removeNode(nodeId: NodeId): readonly NodeSnapshot[];
+	removeNode(nodeId: NodeId): readonly NodeId[];
 	setParent(nodeId: NodeId, parentId: NodeId | null, order: number): void;
 	setTransform(nodeId: NodeId, transform: NodeTransform): void;
 	setTint(nodeId: NodeId, tint: string | null): void;
@@ -63,6 +63,20 @@ export interface RenderState {
 
 export function createRenderState(widgetId: WidgetId): RenderState {
 	const nodes = new Map<NodeId, NodeState>();
+	const children = new Map<NodeId | undefined, Set<NodeId>>();
+
+	const indexChild = (nodeId: NodeId, parentId: NodeId | undefined): void => {
+		let set = children.get(parentId);
+		if (set === undefined) {
+			set = new Set();
+			children.set(parentId, set);
+		}
+		set.add(nodeId);
+	};
+
+	const unindexChild = (nodeId: NodeId, parentId: NodeId | undefined): void => {
+		children.get(parentId)?.delete(nodeId);
+	};
 
 	const requireNode = (nodeId: NodeId): NodeState => {
 		const node = nodes.get(nodeId);
@@ -77,10 +91,16 @@ export function createRenderState(widgetId: WidgetId): RenderState {
 	};
 
 	const collectSubtree = (nodeId: NodeId): readonly NodeId[] => {
-		const subtree: NodeId[] = [nodeId];
-		for (const node of nodes.values()) {
-			if (node.parentId === nodeId) {
-				subtree.push(...collectSubtree(node.nodeId));
+		const subtree: NodeId[] = [];
+		const stack: NodeId[] = [nodeId];
+		while (stack.length > 0) {
+			const current = stack.pop();
+			if (current === undefined) break;
+			subtree.push(current);
+			const nested = children.get(current);
+			if (nested === undefined) continue;
+			for (const child of nested) {
+				stack.push(child);
 			}
 		}
 		return subtree;
@@ -127,17 +147,20 @@ export function createRenderState(widgetId: WidgetId): RenderState {
 				filterIds: [],
 				filterParams: [],
 			});
+			indexChild(nodeId, undefined);
 		},
 		has(nodeId) {
 			return nodes.has(nodeId);
 		},
 		removeNode(nodeId) {
 			requireNode(nodeId);
-			const removed = collectSubtree(nodeId).map((id) =>
-				toSnapshot(requireNode(id)),
-			);
-			for (const snapshot of removed) {
-				nodes.delete(snapshot.nodeId);
+			const removed = collectSubtree(nodeId);
+			for (const removedId of removed) {
+				const node = nodes.get(removedId);
+				if (node === undefined) continue;
+				unindexChild(removedId, node.parentId);
+				children.delete(removedId);
+				nodes.delete(removedId);
 			}
 			return removed;
 		},
@@ -159,12 +182,16 @@ export function createRenderState(widgetId: WidgetId): RenderState {
 				}
 				const node = requireNode(nodeId);
 				requireNode(parentId);
+				unindexChild(nodeId, node.parentId);
 				node.parentId = parentId;
 				node.order = order;
+				indexChild(nodeId, parentId);
 			} else {
 				const node = requireNode(nodeId);
+				unindexChild(nodeId, node.parentId);
 				node.parentId = undefined;
 				node.order = order;
+				indexChild(nodeId, undefined);
 			}
 		},
 		setTransform(nodeId, transform) {

@@ -46,7 +46,7 @@ export function createFakeRenderTarget(
 		removeNode(nodeId: NodeId): readonly NodeId[] {
 			const removed = state.removeNode(nodeId);
 			record("removeNode", [nodeId]);
-			return removed.map((snapshot) => snapshot.nodeId);
+			return removed;
 		},
 		setParent(nodeId: NodeId, parentId: NodeId, order: number): void {
 			record("setParent", [nodeId, parentId, order]);
