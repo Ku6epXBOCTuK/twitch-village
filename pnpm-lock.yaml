@@ -252,6 +252,19 @@ importers:
         specifier: ^0.34.5
         version: 0.34.5
 
+  packages/widget-shooting-words:
+    dependencies:
+      '@tv/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+    devDependencies:
+      '@assetpack/core':
+        specifier: ^1.7.0
+        version: 1.7.0(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)
+      sharp:
+        specifier: ^0.34.5
+        version: 0.34.5
+
 packages:
 
   '@assetpack/core@1.7.0':
