@@ -641,7 +641,7 @@ HTML-оверлей в правом верхнем углу той же стра
 ### 8.3. `event-mock`
 
 - `MockEventSource` по интерфейсу `ViewerEventSource`:
-  `subscribe(handler): () => void`, `start(config)`, `stop()`.
+  `subscribe(handler): () => void`, `start(config)`, `stop()`, `emit(event)`.
 - Режимы: ручной (события из debug-панели) и авто (интервал, случайные имена).
 - Детерминированный PRNG с seed — для воспроизводимых смоук-тестов.
 
