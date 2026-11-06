@@ -5,7 +5,7 @@ import sharp from "sharp";
 
 const root = dirname(fileURLToPath(import.meta.url));
 const source = join(root, "..", "assets-src");
-const target = join(root, "..", "assets", "pizdudes{m}");
+const target = join(root, "..", "assets", "pizdudes");
 
 const CELL = 84;
 const FRAMES = 8;

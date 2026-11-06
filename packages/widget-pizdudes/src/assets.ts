@@ -1,6 +1,7 @@
 import type { AssetId } from "@tv/protocol";
+import { PIZDUDES_ASSET_BUNDLE } from "./constants";
 
-export const ASSET_BUNDLE = "default";
+export const ASSET_BUNDLE = PIZDUDES_ASSET_BUNDLE;
 
 export const COOK_DIRECTIONS = [
 	"east",

@@ -1,4 +1,4 @@
-import type { WidgetId } from "@tv/protocol";
+import type { ViewerEvent, WidgetId } from "@tv/protocol";
 import { Deferred, Effect, Exit, Fiber } from "effect";
 import { CoreApp, Statuses } from "../live";
 import type { WidgetFrame } from "../loop/ticker";
@@ -24,6 +24,9 @@ export interface SceneManager {
 	status(widgetId: WidgetId): WidgetStatus | undefined;
 	list(): readonly WidgetId[];
 	frames(): readonly WidgetFrame[];
+	dispatch(event: ViewerEvent): void;
+	pause(): void;
+	resume(): void;
 }
 
 export type SceneManagerServices = CoreApp | WidgetHostServices;
@@ -133,6 +136,15 @@ export function createSceneManager(): Effect.Effect<
 				}),
 			status: (widgetId) => hosts.get(widgetId)?.status(),
 			frames: () => [...hosts.values()].map((host) => host.frame()),
+			dispatch: (event) => {
+				for (const host of hosts.values()) host.onCoreEvent(event);
+			},
+			pause: () => {
+				for (const host of hosts.values()) host.pause();
+			},
+			resume: () => {
+				for (const host of hosts.values()) host.resume();
+			},
 		};
 	});
 }

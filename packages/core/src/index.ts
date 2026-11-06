@@ -13,10 +13,22 @@ export {
 	coreAppLayer,
 	coreLive,
 	createCoreRuntime,
+	createProductionRuntime,
+	assetsLayer,
+	effectsLayer,
+	manifestsLayer,
+	productionLive,
 	renderTargetsLayer,
+	statusesLayer,
+	viewportsLayer,
 	workersLayer,
 } from "./live";
-export type { CoreServices, RenderTargetFactory, WorkerFactory } from "./live";
+export type {
+	CoreServices,
+	ProductionLiveOptions,
+	RenderTargetFactory,
+	WorkerFactory,
+} from "./live";
 export type {
 	AssetRegistryFactory,
 	EffectManifestLoader,
@@ -27,6 +39,7 @@ export type { CoreAppOptions, CorePixiOptions } from "./pixi/types";
 export { buildPixiOptions, createPixiApp } from "./pixi/create-app";
 export type { RenderTarget } from "./nodes/render-target";
 export { createPixiRenderTarget } from "./nodes/pixi-render-target";
+export { createStatusStore } from "./status";
 export type {
 	CounterName,
 	ErrorCounterName,
@@ -35,6 +48,20 @@ export type {
 	WidgetState,
 	WidgetStatus,
 } from "./status";
+export { createPixiAssetBackend } from "./assets/pixi-asset-backend";
+export type { PixiAssetBackendOptions } from "./assets/pixi-asset-backend";
+export { createManifestAssetRegistry } from "./assets/manifest-registry";
+export { loadAssetManifest } from "./assets/load-asset-manifest";
+export type {
+	AssetBackend,
+	AssetRegistry,
+	AssetRegistryOptions,
+} from "./assets/asset-registry";
+export type {
+	AssetBundle,
+	AssetEntry,
+	AssetManifest,
+} from "./assets/manifest";
 export {
 	HEARTBEAT_INTERVAL_MS,
 	HEARTBEAT_TIMEOUT_MS,

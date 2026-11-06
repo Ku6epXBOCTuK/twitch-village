@@ -7,6 +7,7 @@
 	"types": "./src/index.ts",
 	"exports": {
 		".": "./src/index.ts",
+		"./constants": "./src/constants.ts",
 		"./worker": "./src/worker.ts"
 	},
 	"scripts": {
@@ -14,7 +15,7 @@
 		"test": "vitest run --reporter=../../tools/vitest-failures-first.ts --passWithNoTests",
 		"test:watch": "vitest watch --reporter=../../tools/vitest-failures-first.ts --passWithNoTests",
 		"lint": "eslint src",
-		"assets": "node scripts/prepare-assets.mjs && assetpack"
+		"assets": "node scripts/prepare-assets.mjs && assetpack && node scripts/fix-manifest.mjs"
 	},
 	"dependencies": {
 		"@tv/protocol": "workspace:*"

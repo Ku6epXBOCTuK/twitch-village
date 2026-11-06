@@ -8,6 +8,7 @@ const ManifestPath = Schema.Union([Schema.String, Schema.Array(Schema.String)]);
 export const AssetEntrySchema = Schema.Struct({
 	alias: AssetAlias,
 	src: ManifestPath,
+	data: Schema.optional(Schema.Unknown),
 });
 
 export type AssetEntry = Schema.Schema.Type<typeof AssetEntrySchema>;

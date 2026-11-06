@@ -1,16 +1,15 @@
 import type { WidgetId } from "@tv/protocol";
 import { ASSET_BUNDLE } from "./assets";
+import { PIZDUDES_WIDGET_ID } from "./constants";
 
-export const PIZDUDES_WIDGET_ID = "pizdudes" as WidgetId;
+export { PIZDUDES_WIDGET_ID };
 
 export interface PizdudesWidgetDefinition {
 	readonly id: WidgetId;
 	readonly assetBundle: string;
-	readonly workerUrl: URL;
 }
 
 export const pizdudesWidget: PizdudesWidgetDefinition = {
 	id: PIZDUDES_WIDGET_ID,
 	assetBundle: ASSET_BUNDLE,
-	workerUrl: new URL("./worker.ts", import.meta.url),
 };

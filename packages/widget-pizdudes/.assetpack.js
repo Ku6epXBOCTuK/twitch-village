@@ -1,7 +1,7 @@
 import { pixiManifest } from "@assetpack/core/manifest";
 
 export default {
-	entry: "./assets",
+	entry: "./assets/pizdudes",
 	output: "./dist-assets",
 	cache: false,
 	pipes: [

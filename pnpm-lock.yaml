@@ -199,6 +199,12 @@ importers:
       '@tv/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
+      '@tv/widget-pizdudes':
+        specifier: workspace:*
+        version: link:../../packages/widget-pizdudes
+      effect:
+        specifier: ^4.0.5
+        version: 4.0.5
     devDependencies:
       vite:
         specifier: ^8.0.0

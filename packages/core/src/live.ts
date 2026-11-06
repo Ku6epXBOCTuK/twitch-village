@@ -1,15 +1,21 @@
-import type { ManifestLoadFailed, WidgetId } from "@tv/protocol";
-import { Context, Effect, Layer, ManagedRuntime } from "effect";
+import { ManifestLoadFailed, type WidgetId } from "@tv/protocol";
+import { Context, Effect, Layer, ManagedRuntime, Schema } from "effect";
 import type { Application } from "pixi.js";
 import type { AssetRegistry } from "./assets/asset-registry";
-import type { EffectManifest } from "./effects/effect-manifest";
+import { createManifestAssetRegistry } from "./assets/manifest-registry";
+import type { AssetManifest } from "./assets/manifest";
+import { createPixiAssetBackend } from "./assets/pixi-asset-backend";
+import {
+	EffectManifestSchema,
+	type EffectManifest,
+} from "./effects/effect-manifest";
 import type { EffectCompiler } from "./effects/effect-registry";
 import { createPixiRenderTarget } from "./nodes/pixi-render-target";
 import type { RenderTarget } from "./nodes/render-target";
 import { createPixiApp } from "./pixi/create-app";
 import type { CoreAppOptions } from "./pixi/types";
 import { type CommandBusFactory, createCommandBus } from "./queue/command-bus";
-import type { StatusStore } from "./status";
+import { createStatusStore, type StatusStore } from "./status";
 import type { Viewport } from "./viewport";
 import type { WorkerPort } from "./widget/worker-transport";
 
@@ -120,4 +126,84 @@ export function coreLive(options: CoreAppOptions): Layer.Layer<CoreServices> {
 
 export function createCoreRuntime(options: CoreAppOptions) {
 	return ManagedRuntime.make(coreLive(options));
+}
+
+export function statusesLayer(
+	store: StatusStore = createStatusStore({}),
+): Layer.Layer<Statuses> {
+	return Layer.succeed(Statuses, store);
+}
+
+export const viewportsLayer: Layer.Layer<Viewports, never, CoreApp> =
+	Layer.effect(
+		Viewports,
+		Effect.map(CoreApp, (app) => () => ({
+			width: app.screen.width,
+			height: app.screen.height,
+		})),
+	);
+
+export const effectsLayer: Layer.Layer<Effects> = Layer.succeed(Effects, {
+	compile: () => {
+		throw new Error("Effect compiler is not wired yet");
+	},
+});
+
+export const manifestsLayer: Layer.Layer<Manifests> = Layer.succeed(Manifests, {
+	load: (url) =>
+		Effect.tryPromise({
+			try: async () => {
+				const response = await fetch(url);
+				if (!response.ok) {
+					throw new Error(`manifest failed with ${response.status}`);
+				}
+				const data: unknown = await response.json();
+				return Schema.decodeUnknownSync(EffectManifestSchema)(data);
+			},
+			catch: (cause) =>
+				new ManifestLoadFailed({
+					widgetId: "core" as WidgetId,
+					message: cause instanceof Error ? cause.message : String(cause),
+					url: url.toString(),
+				}),
+		}),
+});
+
+export function assetsLayer(
+	manifest: AssetManifest,
+	baseUrl = "/",
+): Layer.Layer<Assets> {
+	return Layer.succeed(Assets, {
+		create: (widgetId) =>
+			createManifestAssetRegistry(
+				{
+					widgetId,
+					backend: createPixiAssetBackend({ baseUrl }),
+				},
+				manifest,
+			),
+	});
+}
+
+export interface ProductionLiveOptions extends CoreAppOptions {
+	readonly assetManifest: AssetManifest;
+	readonly assetBaseUrl?: string;
+	readonly statuses?: StatusStore;
+}
+
+export function productionLive(options: ProductionLiveOptions) {
+	const base = coreLive(options);
+	return Layer.mergeAll(
+		base,
+		workersLayer,
+		statusesLayer(options.statuses),
+		Layer.provide(viewportsLayer, base),
+		effectsLayer,
+		manifestsLayer,
+		assetsLayer(options.assetManifest, options.assetBaseUrl),
+	);
+}
+
+export function createProductionRuntime(options: ProductionLiveOptions) {
+	return ManagedRuntime.make(productionLive(options));
 }
