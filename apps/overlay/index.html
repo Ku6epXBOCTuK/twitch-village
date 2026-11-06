@@ -15,6 +15,19 @@
 			#app {
 				position: absolute;
 				inset: 0;
+				background: transparent;
+			}
+			#app canvas {
+				display: block;
+				background: transparent;
+			}
+			html.tv-preview body {
+				background: #e5e7eb;
+			}
+			@media (prefers-color-scheme: dark) {
+				html.tv-preview body {
+					background: #0b0d12;
+				}
 			}
 		</style>
 	</head>

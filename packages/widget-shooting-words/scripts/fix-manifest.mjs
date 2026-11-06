@@ -8,6 +8,7 @@ const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
 const aliasPattern = /^[A-Za-z0-9:_/-]+$/;
 
 for (const bundle of manifest.bundles) {
+	bundle.name = "shooting-words";
 	for (const asset of bundle.assets) {
 		const aliases = Array.isArray(asset.alias) ? asset.alias : [asset.alias];
 		const kept = aliases.filter((alias) => aliasPattern.test(alias));

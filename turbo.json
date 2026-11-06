@@ -21,7 +21,8 @@
 			"persistent": true
 		},
 		"assets": {
-			"outputs": ["dist-assets/**"]
+			"dependsOn": ["^assets"],
+			"outputs": ["dist-assets/**", "public/**"]
 		}
 	}
 }

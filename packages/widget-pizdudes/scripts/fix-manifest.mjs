@@ -9,6 +9,7 @@ const assetIdPattern = /^[A-Za-z0-9:_/-]+$/;
 const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
 
 for (const bundle of manifest.bundles) {
+	bundle.name = "pizdudes";
 	for (const asset of bundle.assets) {
 		const aliases = Array.isArray(asset.alias) ? asset.alias : [asset.alias];
 		const valid = aliases.filter((alias) => assetIdPattern.test(alias));

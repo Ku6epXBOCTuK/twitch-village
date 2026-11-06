@@ -1,7 +1,7 @@
 import { defineConfig } from "vite";
 
 export default defineConfig({
-	publicDir: "../../packages/widget-pizdudes/dist-assets",
+	publicDir: "public",
 	server: {
 		port: 5173,
 		host: true,
@@ -12,6 +12,7 @@ export default defineConfig({
 			"@tv/event-mock",
 			"@tv/protocol",
 			"@tv/widget-pizdudes",
+			"@tv/widget-shooting-words",
 		],
 	},
 	worker: {

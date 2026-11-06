@@ -4,7 +4,10 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
+		"assets": "node scripts/prepare-assets.mjs",
+		"predev": "pnpm -w assets",
 		"dev": "vite",
+		"prebuild": "pnpm -w assets",
 		"build": "vite build",
 		"preview": "vite preview",
 		"typecheck": "tsc --noEmit -p tsconfig.json",
@@ -15,6 +18,7 @@
 		"@tv/event-mock": "workspace:*",
 		"@tv/protocol": "workspace:*",
 		"@tv/widget-pizdudes": "workspace:*",
+		"@tv/widget-shooting-words": "workspace:*",
 		"effect": "^4.0.5"
 	},
 	"devDependencies": {

@@ -202,6 +202,9 @@ importers:
       '@tv/widget-pizdudes':
         specifier: workspace:*
         version: link:../../packages/widget-pizdudes
+      '@tv/widget-shooting-words':
+        specifier: workspace:*
+        version: link:../../packages/widget-shooting-words
       effect:
         specifier: ^4.0.5
         version: 4.0.5

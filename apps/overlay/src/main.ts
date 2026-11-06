@@ -8,14 +8,20 @@ import {
 	loadAssetManifest,
 	runFrame,
 	statusesLayer,
+	type WidgetDescriptor,
 } from "@tv/core";
 import { MockEventSource } from "@tv/event-mock";
 import {
 	PIZDUDES_ASSET_BUNDLE,
 	PIZDUDES_WIDGET_ID,
 } from "@tv/widget-pizdudes/constants";
+import {
+	SHOOTING_WORDS_ASSET_BUNDLE,
+	SHOOTING_WORDS_WIDGET_ID,
+} from "@tv/widget-shooting-words/constants";
 import { Effect } from "effect";
 import pizdudesWorkerUrl from "../../../packages/widget-pizdudes/src/worker.ts?worker&url";
+import shootingWordsWorkerUrl from "../../../packages/widget-shooting-words/src/worker.ts?worker&url";
 import { readOverlayConfig } from "./config";
 import { createDebugPanel, type DebugPanel } from "./debug/panel";
 
@@ -23,6 +29,10 @@ const root = document.querySelector<HTMLDivElement>("#app");
 
 async function main(): Promise<void> {
 	if (root === null) return;
+
+	if (!("obsstudio" in window)) {
+		document.documentElement.classList.add("tv-preview");
+	}
 
 	const config = readOverlayConfig(window.location.search);
 	const assetManifest = await loadAssetManifest("/manifest.json");
@@ -40,6 +50,8 @@ async function main(): Promise<void> {
 			return yield* CoreApp;
 		}),
 	);
+	app.renderer.background.alpha = 0;
+	app.canvas.style.background = "transparent";
 	root.appendChild(app.canvas);
 
 	const scene = await runtime.runPromise(createSceneManager());
@@ -54,19 +66,32 @@ async function main(): Promise<void> {
 	const source = new MockEventSource();
 	source.subscribe((event) => scene.dispatch(event));
 	let sourceConfig = { seed: config.seed, mode: config.mode };
-	const descriptor = {
-		id: PIZDUDES_WIDGET_ID,
-		workerUrl: new URL(pizdudesWorkerUrl, import.meta.url),
-		assetBundle: PIZDUDES_ASSET_BUNDLE,
-		config: { debug: config.debug },
-	};
-
+	const descriptors = [
+		{
+			id: PIZDUDES_WIDGET_ID,
+			workerUrl: new URL(pizdudesWorkerUrl, import.meta.url),
+			assetBundle: PIZDUDES_ASSET_BUNDLE,
+			config: { debug: config.debug },
+		},
+		{
+			id: SHOOTING_WORDS_WIDGET_ID,
+			workerUrl: new URL(shootingWordsWorkerUrl, import.meta.url),
+			assetBundle: SHOOTING_WORDS_ASSET_BUNDLE,
+			config: { debug: config.debug },
+		},
+	];
+	const known = new Map(
+		descriptors.map((descriptor) => [descriptor.id, descriptor] as const),
+	);
+	const active: WidgetDescriptor[] = [];
 	for (const widgetId of config.widgets) {
-		if (widgetId !== PIZDUDES_WIDGET_ID) {
+		const descriptor = known.get(widgetId);
+		if (descriptor === undefined) {
 			console.warn(`unknown widget ${widgetId}`);
 			continue;
 		}
 		await runtime.runPromise(scene.activate(descriptor));
+		active.push(descriptor);
 	}
 
 	source.start(sourceConfig);
@@ -84,9 +109,11 @@ async function main(): Promise<void> {
 				source.start(sourceConfig);
 			},
 			onClear: () => {
-				void runtime
-					.runPromise(scene.activate(descriptor, { restart: true }))
-					.catch((cause: unknown) => console.error("restart failed", cause));
+				for (const descriptor of active) {
+					void runtime
+						.runPromise(scene.activate(descriptor, { restart: true }))
+						.catch((cause: unknown) => console.error("restart failed", cause));
+				}
 			},
 		});
 	}
