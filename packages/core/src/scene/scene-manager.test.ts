@@ -322,6 +322,28 @@ describe("SceneManager", () => {
 		expect(manager.status(arenaId)?.state).toBe("active");
 	});
 
+	it("gives every widget its own target and command queue", async () => {
+		const { activate, manager, run, targets } = await setup();
+
+		await activate(descriptorOf(villageId));
+		await activate(descriptorOf(arenaId));
+
+		const frames = manager.frames();
+		const [villageFrame, arenaFrame] = frames;
+
+		expect(frames).toHaveLength(2);
+		expect(villageFrame?.context.target).toBe(targets.get(villageId));
+		expect(arenaFrame?.context.target).toBe(targets.get(arenaId));
+		expect(villageFrame?.bus).not.toBe(arenaFrame?.bus);
+
+		await run(manager.deactivate(villageId));
+
+		const remaining = manager.frames();
+		expect(remaining).toHaveLength(1);
+		expect(remaining[0]?.context.target).toBe(targets.get(arenaId));
+		expect(remaining[0]?.bus).toBe(arenaFrame?.bus);
+	});
+
 	it("forgets the widget on deactivate", async () => {
 		const { activate, manager, run, status } = await setup();
 
