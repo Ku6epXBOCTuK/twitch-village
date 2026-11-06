@@ -200,6 +200,9 @@ export function createWidgetHost(
 								Effect.sync(() => {
 									statusStore.count(id, "dropped", dropped - reportedDropped);
 									reportedDropped = dropped;
+									if (phase === "active") {
+										statusStore.setState(id, "degraded");
+									}
 								}),
 							),
 						),
@@ -330,6 +333,7 @@ export function createWidgetHost(
 											worker,
 											widgetId: id,
 											onFailure: (error: WorkerTransportFailure) => {
+												statusStore.recordError(id, error);
 												if (!Deferred.doneUnsafe(ready, Effect.fail(error))) {
 													markFailed();
 													Effect.runFork(closeActivation());
