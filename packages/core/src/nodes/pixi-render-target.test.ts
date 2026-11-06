@@ -1,7 +1,6 @@
-import type { NodeId, WidgetId } from "@tv/protocol";
-import { Graphics, Texture } from "pixi.js";
-import type { Container } from "pixi.js";
-import { describe, expect, it } from "vitest";
+import { type NodeId, UnknownNode, type WidgetId } from "@tv/protocol";
+import { Container, Graphics, Texture } from "pixi.js";
+import { describe, expect, it, vi } from "vitest";
 import { createPixiRenderTarget } from "./pixi-render-target";
 import { describeRenderTargetContract } from "./render-target.contract";
 
@@ -18,6 +17,31 @@ describeRenderTargetContract("PixiRenderTarget", (widgetId: WidgetId) =>
 );
 
 describe("PixiRenderTarget", () => {
+	it("reports UnknownNode when the state has a node but its view is missing", () => {
+		const target = createPixiRenderTarget({ widgetId: "village" as WidgetId });
+		const nodeId = asNodeId("ghost");
+		const addChild = vi.spyOn(Container.prototype, "addChild");
+		addChild.mockImplementationOnce(() => {
+			throw new Error("view was not attached");
+		});
+
+		try {
+			expect(() => target.createNode(nodeId, "container")).toThrow(
+				"view was not attached",
+			);
+		} finally {
+			addChild.mockRestore();
+		}
+
+		let error: unknown;
+		try {
+			target.setTransform(nodeId, { x: 1 });
+		} catch (cause: unknown) {
+			error = cause;
+		}
+		expect(error).toBeInstanceOf(UnknownNode);
+	});
+
 	it("moves the view back under the root when the parent is null", () => {
 		const target = createPixiRenderTarget({
 			widgetId: "village" as WidgetId,

@@ -2,6 +2,7 @@ import {
 	type EffectId,
 	InvalidCommand,
 	type NodeId,
+	UnknownNode,
 	type WidgetId,
 } from "@tv/protocol";
 import type { Filter, Texture } from "pixi.js";
@@ -29,7 +30,11 @@ export function createPixiRenderTarget(
 	const requireView = (nodeId: NodeId): Container => {
 		const view = views.get(nodeId);
 		if (!view) {
-			throw new Error(`Missing view for node: ${nodeId}`);
+			throw new UnknownNode({
+				widgetId: options.widgetId,
+				message: `Missing view for node: ${nodeId}`,
+				nodeId,
+			});
 		}
 		return view;
 	};
