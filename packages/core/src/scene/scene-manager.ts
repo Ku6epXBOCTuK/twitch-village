@@ -25,8 +25,8 @@ export interface SceneManager {
 	list(): readonly WidgetId[];
 	frames(): readonly WidgetFrame[];
 	dispatch(event: ViewerEvent): void;
-	pause(): void;
-	resume(): void;
+	pause(): Effect.Effect<void>;
+	resume(): Effect.Effect<void>;
 }
 
 export type SceneManagerServices = CoreApp | WidgetHostServices;
@@ -139,12 +139,14 @@ export function createSceneManager(): Effect.Effect<
 			dispatch: (event) => {
 				for (const host of hosts.values()) host.onCoreEvent(event);
 			},
-			pause: () => {
-				for (const host of hosts.values()) host.pause();
-			},
-			resume: () => {
-				for (const host of hosts.values()) host.resume();
-			},
+			pause: () =>
+				Effect.forEach([...hosts.values()], (host) => host.pause(), {
+					discard: true,
+				}),
+			resume: () =>
+				Effect.forEach([...hosts.values()], (host) => host.resume(), {
+					discard: true,
+				}),
 		};
 	});
 }

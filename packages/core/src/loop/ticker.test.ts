@@ -48,7 +48,6 @@ interface Harness {
 		readonly bus: CommandBus;
 		readonly push: (commands: readonly RenderCommand[]) => Promise<void>;
 		readonly stats: () => Promise<CommandBusStats>;
-		readonly alive: () => number;
 	}>;
 	readonly run: (frames: readonly WidgetFrame[]) => Promise<void>;
 	readonly runWith: (
@@ -85,8 +84,6 @@ function setup(): Harness {
 				...(options?.now === undefined ? {} : { now: options.now }),
 			}),
 		);
-		let aliveCount = 0;
-
 		store.register(id);
 
 		return {
@@ -94,16 +91,12 @@ function setup(): Harness {
 				widgetId: id,
 				bus,
 				context: { widgetId: id, target, textures, effects },
-				ensureAlive: () => {
-					aliveCount += 1;
-				},
 			},
 			target,
 			bus,
 			push: (commands: readonly RenderCommand[]) =>
 				Effect.runPromise(bus.push(id, commands)),
 			stats: () => Effect.runPromise(bus.stats(id)),
-			alive: () => aliveCount,
 		};
 	};
 
@@ -157,13 +150,12 @@ describe("runFrame", () => {
 		expect(harness.store.get("village" as WidgetId)?.counters.skipped).toBe(4);
 	});
 
-	it("checks the watchdog of a widget with an empty queue", async () => {
+	it("does not touch the target for a widget with an empty queue", async () => {
 		const harness = setup();
 		const village = await harness.widget("village");
 
 		await harness.run([village.frame]);
 
-		expect(village.alive()).toBe(1);
 		expect(village.target.calls).toHaveLength(0);
 	});
 

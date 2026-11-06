@@ -16,7 +16,6 @@ import type { Container } from "pixi.js";
 import { createEffectRegistry } from "../effects/effect-registry";
 import {
 	Assets,
-	Clock,
 	CommandBuses,
 	Effects,
 	Manifests,
@@ -60,7 +59,6 @@ export type WidgetError =
 
 export type WidgetHostServices =
 	| Assets
-	| Clock
 	| CommandBuses
 	| Effects
 	| Manifests
@@ -77,9 +75,8 @@ export interface WidgetHost {
 	stop(): Effect.Effect<void>;
 	onCoreEvent(event: ViewerEvent): void;
 	setViewport(viewport: Viewport): void;
-	pause(): void;
-	resume(): void;
-	ensureAlive(): void;
+	pause(): Effect.Effect<void>;
+	resume(): Effect.Effect<void>;
 	frame(): WidgetFrame;
 	status(): WidgetStatus;
 }
@@ -162,7 +159,6 @@ export function createWidgetHost(
 		const viewportSource = yield* Viewports;
 		const workerFactory = yield* Workers;
 		const manifestLoader = yield* Manifests;
-		const clock = yield* Clock;
 		const commandBuses = yield* CommandBuses;
 
 		const watchdog = createWatchdog();
@@ -233,6 +229,7 @@ export function createWidgetHost(
 				phase = "idle";
 				lastViewport = null;
 				pendingEvents.length = 0;
+				yield* watchdog.stop();
 				yield* commandBus.clear(id);
 
 				const scope = activationScope;
@@ -266,10 +263,7 @@ export function createWidgetHost(
 			);
 		}
 
-		const ensureAlive = () => {
-			if (phase !== "active") return;
-			if (!watchdog.overdue(clock.now())) return;
-
+		const onWatchdogTimeout = Effect.gen(function* () {
 			statusStore.recordError(
 				id,
 				new WidgetTimeout({
@@ -278,8 +272,8 @@ export function createWidgetHost(
 				}),
 			);
 			markFailed();
-			Effect.runFork(closeActivation());
-		};
+			yield* Effect.forkDetach(closeActivation());
+		});
 
 		return {
 			widgetId: id,
@@ -350,7 +344,7 @@ export function createWidgetHost(
 												}),
 												Match.tag("Heartbeat", () => {
 													statusStore.count(id, "heartbeat");
-													watchdog.beat(clock.now());
+													watchdog.beat();
 												}),
 											);
 										});
@@ -404,7 +398,6 @@ export function createWidgetHost(
 						);
 
 						if (phase !== "starting") return;
-						watchdog.reset(clock.now());
 						statusStore.setState(id, "active");
 						phase = "active";
 						if (lastViewport !== null) {
@@ -416,6 +409,11 @@ export function createWidgetHost(
 						const queued = pendingEvents.splice(0);
 						for (const event of queued) {
 							sendToWorker(event);
+						}
+
+						const scope = activationScope;
+						if (scope !== null) {
+							yield* watchdog.start(scope, onWatchdogTimeout);
 						}
 					}),
 					(exit) =>
@@ -447,27 +445,28 @@ export function createWidgetHost(
 					lastViewport = viewport;
 				}
 			},
-			pause: () => {
-				if (phase === "active" && !watchdog.paused) {
-					watchdog.pause();
+			pause: () =>
+				Effect.gen(function* () {
+					if (phase !== "active" || watchdog.paused) return;
+					yield* watchdog.pause();
 					statusStore.setState(id, "paused");
 					const transport = transportToSend();
 					if (transport !== null) {
 						transport.transport.send(createPauseEvent());
 					}
-				}
-			},
-			resume: () => {
-				if (phase === "active" && watchdog.paused) {
-					watchdog.resume(clock.now());
+				}),
+			resume: () =>
+				Effect.gen(function* () {
+					if (phase !== "active" || !watchdog.paused) return;
+					const scope = activationScope;
+					if (scope === null) return;
+					yield* watchdog.resume(scope, onWatchdogTimeout);
 					statusStore.setState(id, "active");
 					const transport = transportToSend();
 					if (transport !== null) {
 						transport.transport.send(createResumeEvent());
 					}
-				}
-			},
-			ensureAlive,
+				}),
 			frame: () => ({
 				widgetId: id,
 				bus: commandBus,
@@ -477,7 +476,6 @@ export function createWidgetHost(
 					textures: assetRegistry,
 					effects: effectRegistry,
 				},
-				ensureAlive,
 			}),
 			status: () => {
 				const status = statusStore.get(id);

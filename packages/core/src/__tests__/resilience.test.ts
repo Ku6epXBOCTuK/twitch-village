@@ -1,5 +1,6 @@
 import { type NodeId, PROTOCOL_VERSION, type WidgetId } from "@tv/protocol";
 import { Effect, Layer } from "effect";
+import { TestClock } from "effect/testing";
 import { describe, expect, it } from "vitest";
 import type { AssetRegistry } from "../assets/asset-registry";
 import { createAssetRegistry } from "../assets/asset-registry";
@@ -64,7 +65,7 @@ interface RigWidget {
 }
 
 const setup = async (ids: readonly WidgetId[]) => {
-	let now = 0;
+	const now = 0;
 	const status = createStatusStore({ now: () => now });
 	const backends = new Map<
 		WidgetId,
@@ -131,6 +132,15 @@ const setup = async (ids: readonly WidgetId[]) => {
 			effect.pipe(Effect.provide(layer)) as Effect.Effect<A, E>,
 		);
 
+	const runWithTestClock = <A, E, R>(
+		effect: Effect.Effect<A, E, R>,
+	): Promise<A> =>
+		Effect.runPromise(
+			effect.pipe(
+				Effect.provide(Layer.mergeAll(layer, TestClock.layer())),
+			) as Effect.Effect<A, E>,
+		);
+
 	const widgetOf = async (id: WidgetId): Promise<RigWidget> => {
 		const target = targets.get(id);
 		const worker = workers.get(id);
@@ -141,23 +151,27 @@ const setup = async (ids: readonly WidgetId[]) => {
 		return { host, target, worker };
 	};
 
-	const activate = async (id: WidgetId): Promise<RigWidget> => {
+	const prepare = async (id: WidgetId): Promise<RigWidget> => {
 		const rig = await widgetOf(id);
 		rig.worker.onPost = (message) => {
 			if ((message as PostedEnvelope).message._tag !== "Init") return;
 			rig.worker.emitMessage(readyEnvelope(id));
 		};
+		return rig;
+	};
+
+	const activate = async (id: WidgetId): Promise<RigWidget> => {
+		const rig = await prepare(id);
 		await run(rig.host.start());
 		return rig;
 	};
 
 	return {
 		activate,
-		advance: (ms: number) => {
-			now += ms;
-		},
 		backendOf: (id: WidgetId) => backends.get(id),
+		prepare,
 		run,
+		runWithTestClock,
 		status,
 		widgetOf,
 	};
@@ -207,13 +221,22 @@ describe("widget resilience", () => {
 
 	it("crashes a silent widget after two seconds and keeps the other alive", async () => {
 		const rig = await setup([silentId, liveId]);
-		const silent = await rig.activate(silentId);
-		const live = await rig.activate(liveId);
+		const silent = await rig.prepare(silentId);
+		const live = await rig.prepare(liveId);
 
-		rig.advance(2001);
-		live.worker.emitMessage(heartbeatEnvelope);
-		silent.host.ensureAlive();
-		live.host.ensureAlive();
+		await rig.runWithTestClock(
+			Effect.gen(function* () {
+				yield* silent.host.start();
+				yield* live.host.start();
+				yield* TestClock.adjust("1 second");
+				live.worker.emitMessage(heartbeatEnvelope);
+				yield* Effect.yieldNow;
+				yield* TestClock.adjust("1001 millis");
+				yield* Effect.forEach([1, 2, 3], () => Effect.yieldNow, {
+					discard: true,
+				});
+			}),
+		);
 
 		const silentStatus = rig.status.get(silentId);
 		expect(silentStatus?.state).toBe("crashed");

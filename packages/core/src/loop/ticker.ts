@@ -10,7 +10,6 @@ export interface WidgetFrame {
 	readonly widgetId: WidgetId;
 	readonly bus: CommandBus;
 	readonly context: ApplyCommandContext;
-	readonly ensureAlive: () => void;
 }
 
 export interface FrameSource {
@@ -39,8 +38,6 @@ export const runFrame = Effect.fnUntraced(function* (source: FrameSource) {
 			}
 		}
 		yield* frame.bus.commit(widgetId, commands.length);
-
-		frame.ensureAlive();
 	}
 });
 

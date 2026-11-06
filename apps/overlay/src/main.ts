@@ -118,14 +118,21 @@ async function main(): Promise<void> {
 		});
 	}
 
+	let visibilityTask = Promise.resolve();
 	document.addEventListener("visibilitychange", () => {
-		if (document.hidden) {
-			scene.pause();
-			source.stop();
-			return;
-		}
-		scene.resume();
-		source.start(sourceConfig);
+		visibilityTask = visibilityTask
+			.then(async () => {
+				if (document.hidden) {
+					source.stop();
+					await runtime.runPromise(scene.pause());
+					return;
+				}
+				await runtime.runPromise(scene.resume());
+				source.start(sourceConfig);
+			})
+			.catch((cause: unknown) => {
+				console.error("visibility change failed", cause);
+			});
 	});
 
 	window.addEventListener("beforeunload", () => {

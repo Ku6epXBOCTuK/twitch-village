@@ -12,7 +12,6 @@ import { createAssetRegistry } from "../assets/asset-registry";
 import type { EffectManifestLoader } from "../live";
 import {
 	Assets,
-	Clock,
 	CommandBuses,
 	Effects,
 	Manifests,
@@ -82,7 +81,6 @@ const setup = async (
 
 	const worker = createFakeWorker();
 	let workerCreations = 0;
-	let now = 0;
 	const descriptor: WidgetDescriptor = {
 		id: widgetId,
 		workerUrl: new URL("http://localhost/village.js"),
@@ -93,7 +91,6 @@ const setup = async (
 
 	const layer = Layer.mergeAll(
 		Layer.succeed(Assets, { create: () => registry }),
-		Layer.succeed(Clock, { now: () => now }),
 		Layer.succeed(CommandBuses, { create: createCommandBus }),
 		Layer.succeed(Effects, compiler),
 		Layer.succeed(Manifests, manifests),
@@ -124,6 +121,15 @@ const setup = async (
 			(envelope) => envelope.message._tag === tag,
 		);
 
+	const runWithTestClock = <A, E, R>(
+		effect: Effect.Effect<A, E, R>,
+	): Promise<A> =>
+		Effect.runPromise(
+			effect.pipe(
+				Effect.provide(Layer.mergeAll(layer, TestClock.layer())),
+			) as Effect.Effect<A, E>,
+		);
+
 	return {
 		backend,
 		initPosted,
@@ -134,10 +140,7 @@ const setup = async (
 		workerCreations: () => workerCreations,
 		host,
 		postedOf,
-		advance: (ms: number) => {
-			now += ms;
-		},
-		now: () => now,
+		runWithTestClock,
 	};
 };
 
@@ -612,24 +615,35 @@ describe("WidgetHost", () => {
 	});
 
 	it("stays active while heartbeats arrive within the timeout", async () => {
-		const { worker, host, advance } = await setup();
-		await Effect.runPromise(host.start());
-
-		advance(1000);
-		worker.emitMessage(serviceEnvelope("Heartbeat"));
-		advance(1000);
-		worker.emitMessage(serviceEnvelope("Heartbeat"));
-		host.ensureAlive();
+		const { worker, host, runWithTestClock } = await setup();
+		await runWithTestClock(
+			Effect.gen(function* () {
+				yield* host.start();
+				yield* TestClock.adjust("1 second");
+				worker.emitMessage(serviceEnvelope("Heartbeat"));
+				yield* Effect.yieldNow;
+				yield* TestClock.adjust("1 second");
+				worker.emitMessage(serviceEnvelope("Heartbeat"));
+				yield* Effect.yieldNow;
+				yield* TestClock.adjust("1 second");
+				yield* Effect.yieldNow;
+			}),
+		);
 
 		expect(host.status().state).toBe("active");
 	});
 
 	it("crashes and terminates the worker when heartbeats stop", async () => {
-		const { worker, host, advance } = await setup();
-		await Effect.runPromise(host.start());
-
-		advance(2001);
-		host.ensureAlive();
+		const { worker, host, runWithTestClock } = await setup();
+		await runWithTestClock(
+			Effect.gen(function* () {
+				yield* host.start();
+				yield* TestClock.adjust("2001 millis");
+				yield* Effect.forEach([1, 2, 3], () => Effect.yieldNow, {
+					discard: true,
+				});
+			}),
+		);
 
 		expect(host.status().state).toBe("crashed");
 		expect(worker.terminated).toBe(true);
@@ -640,12 +654,12 @@ describe("WidgetHost", () => {
 		const { host, postedOf } = await setup();
 		await Effect.runPromise(host.start());
 
-		host.pause();
-		host.pause();
+		await Effect.runPromise(host.pause());
+		await Effect.runPromise(host.pause());
 		expect(postedOf("Pause")).toHaveLength(1);
 
-		host.resume();
-		host.resume();
+		await Effect.runPromise(host.resume());
+		await Effect.runPromise(host.resume());
 		expect(postedOf("Resume")).toHaveLength(1);
 	});
 
@@ -660,72 +674,88 @@ describe("WidgetHost", () => {
 	});
 
 	it("pauses the watchdog on Pause and resumes it on Resume", async () => {
-		const { host, advance, postedOf } = await setup();
-		await Effect.runPromise(host.start());
+		const { host, postedOf, runWithTestClock } = await setup();
+		await runWithTestClock(
+			Effect.gen(function* () {
+				yield* host.start();
+				yield* TestClock.adjust("1 second");
+				yield* host.pause();
+				yield* host.pause();
+				expect(postedOf("Pause")).toHaveLength(1);
 
-		host.pause();
-		expect(postedOf("Pause")).toHaveLength(1);
-		advance(60_000);
-		host.ensureAlive();
-		expect(host.status().state).toBe("paused");
+				yield* TestClock.adjust("60 seconds");
+				yield* Effect.yieldNow;
+				expect(host.status().state).toBe("paused");
 
-		host.resume();
-		expect(postedOf("Resume")).toHaveLength(1);
-		advance(2000);
-		host.ensureAlive();
-		expect(host.status().state).toBe("active");
+				yield* host.resume();
+				yield* host.resume();
+				expect(postedOf("Resume")).toHaveLength(1);
 
-		advance(1);
-		host.ensureAlive();
+				yield* TestClock.adjust("1999 millis");
+				yield* Effect.yieldNow;
+				expect(host.status().state).toBe("active");
+
+				yield* TestClock.adjust("1 millis");
+				yield* Effect.forEach([1, 2, 3], () => Effect.yieldNow, {
+					discard: true,
+				});
+			}),
+		);
+
 		expect(host.status().state).toBe("crashed");
 	});
 
 	it("does not pause or crash a widget that is not active", async () => {
-		const { host, advance, postedOf } = await setup();
+		const { host, postedOf } = await setup();
 
-		host.pause();
+		await Effect.runPromise(host.pause());
 		expect(host.status().state).toBe("loading");
 		expect(postedOf("Pause")).toHaveLength(0);
 
-		host.resume();
+		await Effect.runPromise(host.resume());
 		expect(host.status().state).toBe("loading");
 		expect(postedOf("Resume")).toHaveLength(0);
-
-		advance(60_000);
-		host.ensureAlive();
-		expect(host.status().state).toBe("loading");
 		expect(host.status().lastError).toBeNull();
 	});
 
 	it("stops watching the widget after stop", async () => {
-		const { host, advance } = await setup();
-		await Effect.runPromise(host.start());
-		await Effect.runPromise(host.stop());
-
-		advance(60_000);
-		host.ensureAlive();
+		const { host, runWithTestClock } = await setup();
+		await runWithTestClock(
+			Effect.gen(function* () {
+				yield* host.start();
+				yield* host.stop();
+				yield* TestClock.adjust("60 seconds");
+				yield* Effect.yieldNow;
+			}),
+		);
 
 		expect(host.status().state).toBe("loading");
 		expect(host.status().lastError).toBeNull();
 	});
 
 	it("gives the restarted widget a fresh watchdog", async () => {
-		const { host, advance } = await setup();
-		await Effect.runPromise(host.start());
-		advance(2001);
-		host.ensureAlive();
-		expect(host.status().state).toBe("crashed");
+		const { host, runWithTestClock } = await setup();
+		await runWithTestClock(
+			Effect.gen(function* () {
+				yield* host.start();
+				yield* TestClock.adjust("2001 millis");
+				yield* Effect.forEach([1, 2, 3], () => Effect.yieldNow, {
+					discard: true,
+				});
+				expect(host.status().state).toBe("crashed");
 
-		await Effect.runPromise(host.start());
-		host.ensureAlive();
-		expect(host.status().state).toBe("active");
+				yield* host.start();
+				yield* TestClock.adjust("1999 millis");
+				yield* Effect.yieldNow;
+				expect(host.status().state).toBe("active");
 
-		advance(2000);
-		host.ensureAlive();
-		expect(host.status().state).toBe("active");
+				yield* TestClock.adjust("1 millis");
+				yield* Effect.forEach([1, 2, 3], () => Effect.yieldNow, {
+					discard: true,
+				});
+			}),
+		);
 
-		advance(1);
-		host.ensureAlive();
 		expect(host.status().state).toBe("crashed");
 	});
 });
